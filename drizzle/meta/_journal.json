@@ -15,6 +15,13 @@
       "when": 1750506190598,
       "tag": "0001_jazzy_speedball",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1750508408813,
+      "tag": "0002_familiar_frank_castle",
+      "breakpoints": true
     }
   ]
 }
