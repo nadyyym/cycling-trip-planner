@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { auth } from "~/server/auth";
+import { auth, signIn } from "~/server/auth";
 
 export default async function Home() {
   const session = await auth();
@@ -48,12 +48,19 @@ export default async function Home() {
               <p className="mb-4 text-lg text-gray-700">
                 Sign in with Strava to start planning your cycling adventures
               </p>
-              <Link
-                href="/api/auth/signin"
-                className="rounded-md bg-orange-600 px-8 py-3 text-white hover:bg-orange-700"
+              <form
+                action={async () => {
+                  "use server";
+                  await signIn("strava", { redirectTo: "/" });
+                }}
               >
-                Sign in with Strava
-              </Link>
+                <button
+                  type="submit"
+                  className="rounded-md bg-orange-600 px-8 py-3 font-medium text-white hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
+                >
+                  Sign in with Strava
+                </button>
+              </form>
             </div>
           )}
         </div>
@@ -85,6 +92,18 @@ export default async function Home() {
               </p>
             </div>
           </div>
+        </div>
+
+        <div className="mt-8 max-w-md text-center">
+          <h2 className="mb-2 text-lg font-semibold text-gray-900">
+            Why connect Strava?
+          </h2>
+          <ul className="space-y-1 text-sm text-gray-600">
+            <li>• Discover cycling segments from your area</li>
+            <li>• Access detailed route and elevation data</li>
+            <li>• Build personalized multi-day cycling itineraries</li>
+            <li>• Your data stays secure and private</li>
+          </ul>
         </div>
       </div>
     </main>
