@@ -25,7 +25,7 @@ export const env = createEnv({
    * `NEXT_PUBLIC_`.
    */
   client: {
-    // NEXT_PUBLIC_CLIENTVAR: z.string(),
+    NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN: z.string(),
   },
 
   /**
@@ -38,6 +38,8 @@ export const env = createEnv({
     NODE_ENV: process.env.NODE_ENV,
     STRAVA_CLIENT_ID: process.env.STRAVA_CLIENT_ID,
     STRAVA_CLIENT_SECRET: process.env.STRAVA_CLIENT_SECRET,
+    NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN:
+      process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN,
   },
   /**
    * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially
