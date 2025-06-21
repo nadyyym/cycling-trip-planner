@@ -1,6 +1,7 @@
 import { postRouter } from "~/server/api/routers/post";
 import { stravaRouter } from "~/server/api/routers/strava";
 import { segmentRouter } from "~/server/api/routers/segment";
+import { routePlannerRouter } from "~/server/api/routers/routePlanner";
 import { createCallerFactory, createTRPCRouter } from "~/server/api/trpc";
 
 /**
@@ -12,6 +13,7 @@ export const appRouter = createTRPCRouter({
   post: postRouter,
   strava: stravaRouter,
   segment: segmentRouter,
+  routePlanner: routePlannerRouter,
 });
 
 // export type definition of API
