@@ -29,6 +29,12 @@ export default function ExplorePage() {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const mapInitialized = useRef(false);
+  /**
+   * Guard to ensure we only trigger ONE automatic segment search after the
+   * very first map load. This satisfies PRD Step 1 – Instant Segment Search
+   * on First Load.
+   */
+  const hasInitialSegmentSearch = useRef(false);
 
   // Default to Girona, Spain - famous cycling destination
   const [lng, setLng] = useState(2.8214); // Girona longitude
@@ -232,6 +238,30 @@ export default function ExplorePage() {
         // Add fullscreen control
         map.current.addControl(new mapboxgl.FullscreenControl(), "top-right");
 
+        // =============================================
+        // STEP 1 – Instant Segment Search on First Load
+        // Trigger a single bounds update immediately after the style is
+        // fully loaded so that users see segments without having to move
+        // the map. This intentionally bypasses the 400 ms debounce (only
+        // once) and relies on the existing `useSegmentExplore` hook.
+        // =============================================
+        if (!hasInitialSegmentSearch.current) {
+          const initialBounds = map.current.getBounds();
+
+          if (initialBounds) {
+            setMapBounds({
+              sw: [initialBounds.getSouth(), initialBounds.getWest()],
+              ne: [initialBounds.getNorth(), initialBounds.getEast()],
+            });
+          }
+
+          hasInitialSegmentSearch.current = true;
+
+          // Helpful console statement for QA instrumentation
+          // (to be replaced with analytics event in the future).
+          console.log("[SEGMENT_SEARCH_AUTO]");
+        }
+
         // Update state when map moves - debounced to prevent excessive updates
         let moveTimeout: NodeJS.Timeout;
         map.current.on("move", () => {
@@ -243,17 +273,17 @@ export default function ExplorePage() {
             if (map.current) {
               const center = map.current.getCenter();
               const currentZoom = map.current.getZoom();
-              const bounds = map.current.getBounds();
+              const currentBounds = map.current.getBounds();
 
               setLng(Number(center.lng.toFixed(4)));
               setLat(Number(center.lat.toFixed(4)));
               setZoom(Number(currentZoom.toFixed(2)));
 
               // Update map bounds for segment exploration
-              if (bounds) {
+              if (currentBounds) {
                 setMapBounds({
-                  sw: [bounds.getSouth(), bounds.getWest()],
-                  ne: [bounds.getNorth(), bounds.getEast()],
+                  sw: [currentBounds.getSouth(), currentBounds.getWest()],
+                  ne: [currentBounds.getNorth(), currentBounds.getEast()],
                 });
               }
             }
