@@ -80,7 +80,13 @@ export const authConfig = {
   debug: env.NODE_ENV === "development",
   logger: {
     error: (error) => {
-      console.error("[AUTH_ERROR]", error);
+      console.error("[AUTH_ERROR_DETAILED]", {
+        message: error.message,
+        name: error.name,
+        stack: error.stack,
+        cause: error.cause,
+        timestamp: new Date().toISOString(),
+      });
     },
     warn: (code) => {
       console.warn(`[AUTH_WARN] ${code}`);
@@ -93,21 +99,38 @@ export const authConfig = {
   },
   callbacks: {
     async signIn({ user, account, profile }) {
-      console.log("Sign in callback:", {
+      console.log("[AUTH_SIGNIN_START]", {
         userId: user.id,
         provider: account?.provider,
         profilePresent: !!profile,
+        timestamp: new Date().toISOString(),
       });
-      return true;
+
+      try {
+        // Test database connection
+        console.log("[AUTH_DB_TEST] Testing database connection...");
+        await db.query.users.findFirst();
+        console.log("[AUTH_DB_TEST] Database connection successful");
+
+        return true;
+      } catch (error) {
+        console.error("[AUTH_DB_ERROR] Database connection failed:", {
+          error: error instanceof Error ? error.message : error,
+          stack: error instanceof Error ? error.stack : undefined,
+          timestamp: new Date().toISOString(),
+        });
+        return false;
+      }
     },
     async jwt({ token, account, user }): Promise<JWT> {
       // Store access token and refresh token in JWT
       if (account) {
-        console.log("JWT callback - storing tokens:", {
+        console.log("[AUTH_JWT_CALLBACK]", {
           provider: account.provider,
           accessToken: account.access_token ? "present" : "missing",
           refreshToken: account.refresh_token ? "present" : "missing",
           expiresAt: account.expires_at,
+          timestamp: new Date().toISOString(),
         });
 
         token.accessToken = account.access_token;
@@ -118,9 +141,10 @@ export const authConfig = {
       return token;
     },
     session: ({ session, user, token }) => {
-      console.log("Session callback:", {
+      console.log("[AUTH_SESSION_CALLBACK]", {
         userId: user?.id,
         tokenPresent: !!token,
+        timestamp: new Date().toISOString(),
       });
 
       return {
@@ -138,11 +162,19 @@ export const authConfig = {
   },
   events: {
     async signIn({ user, account, profile }) {
-      console.log("User signed in successfully:", {
+      console.log("[AUTH_SIGNIN_SUCCESS]", {
         userId: user.id,
         name: user.name,
         provider: account?.provider,
         profilePresent: !!profile,
+        timestamp: new Date().toISOString(),
+      });
+    },
+    async createUser({ user }) {
+      console.log("[AUTH_CREATE_USER]", {
+        userId: user.id,
+        email: user.email,
+        timestamp: new Date().toISOString(),
       });
     },
   },
