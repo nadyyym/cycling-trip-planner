@@ -46,7 +46,9 @@ export function useSegmentExplore(bounds: MapBounds | null) {
   useEffect(() => {
     if (query.error?.data?.code === "TOO_MANY_REQUESTS") {
       // Extract retry information from TRPC error structure
-      const retryAfter = (query.error as any)?.data?.cause?.retryAfter;
+      const errorData = query.error.data as Record<string, unknown>;
+      const cause = errorData?.cause as Record<string, unknown> | undefined;
+      const retryAfter = cause?.retryAfter as number | undefined;
       handleRateLimit({ cause: { retryAfter } });
     }
   }, [query.error, handleRateLimit]);

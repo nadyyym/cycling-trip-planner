@@ -68,6 +68,19 @@ export interface BoundsInput {
 }
 
 /**
+ * Simplified segment metadata for route planning
+ * Contains only the essential data needed for optimization algorithms
+ */
+export interface SegmentMeta {
+  id: string;
+  name: string;
+  distance: number; // in meters
+  elevationGain: number; // in meters
+  startCoord: [number, number]; // [longitude, latitude]
+  endCoord: [number, number]; // [longitude, latitude]
+}
+
+/**
  * Strava API client with token management
  */
 export class StravaClient {
@@ -478,6 +491,64 @@ export class StravaClient {
         segmentId,
         error: error instanceof Error ? error.message : 'Unknown error',
         duration: `${detailDuration}ms`,
+        stack: error instanceof Error ? error.stack : undefined,
+        timestamp: new Date().toISOString(),
+      });
+      
+      throw error;
+    }
+  }
+
+  /**
+   * Get simplified segment metadata optimized for route planning
+   * Returns only the essential data needed for TSP algorithms and constraint checking
+   * 
+   * @param segmentId Strava segment ID
+   * @returns Essential segment metadata for route planning
+   */
+  async getSegmentMeta(segmentId: string): Promise<SegmentMeta> {
+    const metaStart = Date.now();
+    
+    console.log(`[STRAVA_GET_SEGMENT_META_START]`, {
+      segmentId,
+      timestamp: new Date().toISOString(),
+    });
+
+    try {
+      const data = await this.stravaRequest<StravaSegmentDetailResponse>(
+        `/segments/${segmentId}`,
+      );
+
+      const metaDuration = Date.now() - metaStart;
+
+      const result: SegmentMeta = {
+        id: data.id.toString(),
+        name: data.name,
+        distance: data.distance,
+        elevationGain: data.elev_difference,
+        startCoord: [data.start_latlng[1], data.start_latlng[0]], // Convert to [lon, lat]
+        endCoord: [data.end_latlng[1], data.end_latlng[0]], // Convert to [lon, lat]
+      };
+
+      console.log(`[STRAVA_GET_SEGMENT_META_SUCCESS]`, {
+        segmentId,
+        segmentName: result.name,
+        distance: result.distance,
+        elevationGain: result.elevationGain,
+        startCoord: result.startCoord,
+        endCoord: result.endCoord,
+        duration: `${metaDuration}ms`,
+        timestamp: new Date().toISOString(),
+      });
+
+      return result;
+    } catch (error) {
+      const metaDuration = Date.now() - metaStart;
+      
+      console.error(`[STRAVA_GET_SEGMENT_META_ERROR]`, {
+        segmentId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        duration: `${metaDuration}ms`,
         stack: error instanceof Error ? error.stack : undefined,
         timestamp: new Date().toISOString(),
       });
