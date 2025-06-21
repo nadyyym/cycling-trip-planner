@@ -25,6 +25,24 @@ interface MapboxDirectionsResponse {
   message?: string;
 }
 
+interface MapboxGeocodingResponse {
+  features: Array<{
+    place_name: string;
+    text: string;
+    place_type: string[];
+    properties: {
+      category?: string;
+    };
+    context?: Array<{
+      id: string;
+      text: string;
+      short_code?: string;
+    }>;
+  }>;
+  query: [number, number];
+  attribution: string;
+}
+
 interface MapboxRoute {
   geometry: string; // encoded polyline
   distance: number; // meters
@@ -80,6 +98,12 @@ const directionsCache = new LRUCache<MapboxRoute>({
 const elevationCache = new LRUCache<ElevationResponse>({
   maxSize: 1000,
   ttlMs: 24 * 60 * 60 * 1000, // 24 hours
+});
+
+// Cache for reverse geocoding results with shorter TTL as location context changes more frequently
+const geocodingCache = new LRUCache<LocationInfo>({
+  maxSize: 500,
+  ttlMs: 60 * 60 * 1000, // 1 hour as specified in requirements
 });
 
 /**
@@ -335,6 +359,132 @@ export async function getDirections(
 }
 
 /**
+ * Reverse geocode coordinates to get city and country information
+ * Uses Mapbox Geocoding API to convert [longitude, latitude] to location name
+ * Results are cached for 1 hour to avoid excessive API calls
+ *
+ * @param coordinates [longitude, latitude] pair
+ * @returns LocationInfo with city, country code, and display name
+ */
+export async function reverseGeocode(
+  coordinates: Coordinate,
+): Promise<LocationInfo> {
+  const cacheKey = `${coordinates[0].toFixed(6)},${coordinates[1].toFixed(6)}`;
+
+  // Check cache first
+  const cached = geocodingCache.get(cacheKey);
+  if (cached) {
+    console.log(`[MAPBOX_GEOCODING_CACHE_HIT]`, {
+      coordinates,
+      displayName: cached.displayName,
+      cacheKey,
+      timestamp: new Date().toISOString(),
+    });
+    return cached;
+  }
+
+  console.log(`[MAPBOX_REVERSE_GEOCODING_START]`, {
+    coordinates,
+    types: "place",
+    language: "en",
+    timestamp: new Date().toISOString(),
+  });
+
+  const [lng, lat] = coordinates;
+  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?types=place&language=en&access_token=${env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}`;
+
+  try {
+    const response = await mapboxRequest<MapboxGeocodingResponse>(
+      "reverse-geocoding",
+      url,
+    );
+
+    if (!response.features || response.features.length === 0) {
+      // Fallback to a generic location name if no results
+      const fallback: LocationInfo = {
+        cityName: "Unknown Location",
+        countryCode: "",
+        displayName: "📍 Your Location",
+        fullPlaceName: "Location not found",
+      };
+
+      // Cache the fallback for a shorter period
+      geocodingCache.set(cacheKey, fallback);
+
+      console.log(`[MAPBOX_REVERSE_GEOCODING_FALLBACK]`, {
+        coordinates,
+        reason: "No features in response",
+        fallback: fallback.displayName,
+        timestamp: new Date().toISOString(),
+      });
+
+      return fallback;
+    }
+
+    const feature = response.features[0]!;
+    const cityName = feature.text;
+    let countryCode = "";
+
+    // Extract country code from context if available
+    if (feature.context) {
+      const countryContext = feature.context.find((ctx) =>
+        ctx.id.startsWith("country"),
+      );
+      if (countryContext?.short_code) {
+        countryCode = countryContext.short_code.toUpperCase();
+      }
+    }
+
+    // Create display name with emoji and country code
+    const displayName = countryCode
+      ? `📍 ${cityName}, ${countryCode}`
+      : `📍 ${cityName}`;
+
+    const result: LocationInfo = {
+      cityName,
+      countryCode,
+      displayName,
+      fullPlaceName: feature.place_name,
+    };
+
+    // Cache the result
+    geocodingCache.set(cacheKey, result);
+
+    console.log(`[MAPBOX_REVERSE_GEOCODING_SUCCESS]`, {
+      coordinates,
+      cityName,
+      countryCode,
+      displayName,
+      fullPlaceName: feature.place_name,
+      cached: true,
+      timestamp: new Date().toISOString(),
+    });
+
+    return result;
+  } catch (error) {
+    // Fallback to generic location name on error
+    const fallback: LocationInfo = {
+      cityName: "Your Location",
+      countryCode: "",
+      displayName: "📍 Your Location",
+      fullPlaceName: "Reverse geocoding failed",
+    };
+
+    // Cache the fallback for a shorter period to allow retry
+    geocodingCache.set(cacheKey, fallback);
+
+    console.warn(`[MAPBOX_REVERSE_GEOCODING_ERROR]`, {
+      coordinates,
+      error: error instanceof Error ? error.message : "Unknown error",
+      fallback: fallback.displayName,
+      timestamp: new Date().toISOString(),
+    });
+
+    return fallback;
+  }
+}
+
+/**
  * Get total elevation gain for a given polyline using elevation service
  * This is a simplified implementation - in production you might want to use
  * a more sophisticated elevation API or Mapbox's Map Matching API
@@ -393,4 +543,11 @@ export async function getPolylineElevation(polyline: string): Promise<number> {
   });
 
   return result.totalElevationGain;
+}
+
+export interface LocationInfo {
+  cityName: string; // e.g., "Girona"
+  countryCode: string; // e.g., "ES"
+  displayName: string; // e.g., "Girona, ES"
+  fullPlaceName: string; // Full place name from Mapbox
 }

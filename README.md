@@ -241,6 +241,11 @@ The `/explore` page provides an interactive map-based segment exploration experi
 
 - **Interactive Map**: Mapbox GL-powered map with segment visualization
 - **Live Segment Loading**: Segments automatically load as you navigate the map
+- **Personalized Location Display**: Smart reverse geocoding for location context
+  - Automatically converts user coordinates to city names (e.g., "📍 Girona, ES")
+  - 1-hour caching to minimize API calls and improve performance
+  - Graceful fallbacks to generic "Your Location" if geocoding fails
+  - Real-time location updates when user grants location permissions
 - **Segment Visualization**: 
   - Green lines (color: `#10b981`) show discovered segments
   - Red highlighting (color: `#ef4444`) on hover

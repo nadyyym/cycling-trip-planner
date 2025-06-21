@@ -12,6 +12,10 @@ import { useSegmentStore } from "../_hooks/useSegmentStore";
 import { useRateLimitHandler } from "../_hooks/useRateLimitHandler";
 import { api } from "~/trpc/react";
 import { segmentsToGeoJSON } from "~/lib/mapUtils";
+import {
+  reverseGeocode,
+  type LocationInfo,
+} from "~/server/integrations/mapbox";
 
 // Mapbox access token
 mapboxgl.accessToken = env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
@@ -38,6 +42,8 @@ export default function ExplorePage() {
     "granted" | "denied" | "prompt" | null
   >(null);
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
+  const [currentLocationInfo, setCurrentLocationInfo] =
+    useState<LocationInfo | null>(null);
 
   // Search state
   const [searchValue, setSearchValue] = useState("");
@@ -151,6 +157,23 @@ export default function ExplorePage() {
         }
 
         setLocationPermission("granted");
+
+        // ==== REVERSE GEOCODING (Step 6) ====
+        // Get city name from coordinates for personalized location display
+        // Cache results for 1 hour to avoid excessive API calls
+        // ================================================
+        try {
+          console.log("Starting reverse geocoding for user location...");
+          const locationInfo = await reverseGeocode([longitude, latitude]);
+          setCurrentLocationInfo(locationInfo);
+          console.log(
+            "Reverse geocoding successful:",
+            locationInfo.displayName,
+          );
+        } catch (error) {
+          console.warn("Reverse geocoding failed:", error);
+          // Keep currentLocationInfo as null for fallback behavior
+        }
       } catch (error) {
         console.error("Error getting user location:", error);
         const geoError = error as GeolocationPositionError;
@@ -499,7 +522,12 @@ export default function ExplorePage() {
               {/* Location controls */}
               <div className="rounded-lg bg-green-50 p-4">
                 <h3 className="mb-2 text-sm font-medium text-green-900">
-                  📍 Current location: Girona, Spain
+                  {locationPermission === "granted" &&
+                  !currentLocationInfo &&
+                  isLoadingLocation
+                    ? "📍 Getting your location..."
+                    : (currentLocationInfo?.displayName ??
+                      "📍 Current location: Girona, Spain")}
                 </h3>
                 <button
                   onClick={handleUseMyLocation}
@@ -578,9 +606,11 @@ export default function ExplorePage() {
               <div className="absolute left-4 top-4 rounded-lg bg-white p-3 shadow-md">
                 <div className="text-sm">
                   <div className="font-medium text-gray-900">
-                    {locationPermission === "granted"
-                      ? "📍 Your Location"
-                      : "🏛️ Girona, Spain"}
+                    {locationPermission === "granted" && currentLocationInfo
+                      ? currentLocationInfo.displayName
+                      : locationPermission === "granted"
+                        ? "📍 Your Location"
+                        : "🏛️ Girona, Spain"}
                   </div>
                   <div className="text-gray-500">
                     {locationPermission === "granted"
