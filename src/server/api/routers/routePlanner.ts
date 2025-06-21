@@ -10,6 +10,7 @@ import {
 import { accounts } from "~/server/db/schema";
 import { eq } from "drizzle-orm";
 import { solveOrderedSegments, TSPSolverError } from "~/server/algorithms/tsp";
+import { partitionRoute } from "~/server/algorithms/dailyPartitioner";
 
 /**
  * Route planner tRPC router
@@ -342,18 +343,152 @@ export const routePlannerRouter = createTRPCRouter({
             timestamp: new Date().toISOString(),
           });
 
-          // For now, return success with TSP solution details
-          // Steps 4-6 (geometry stitching and daily partitioning) will be implemented in subsequent commits
-          return {
-            ok: false,
-            error: "notImplemented",
-            details:
-              `TSP solving completed successfully using ${tspSolution.method} method. ` +
-              `Optimized ${tspSolution.orderedSegments.length} segments with total distance ` +
-              `${Math.round(tspSolution.totalDistance / 1000)}km in ${tspSolution.solvingTimeMs}ms. ` +
-              `Segment order: [${tspSolution.orderedSegments.map((seg) => seg.segmentId).join(", ")}]. ` +
-              `Geometry stitching and daily partitioning still pending implementation.`,
-          };
+          // Step 4-6: Daily partitioning (Commit #6)
+          // Note: Geometry stitching (Commit #5) will be added later to enhance this step
+          const step6Start = Date.now();
+          console.log(
+            `[ROUTE_PLANNER_STEP6_START] Partitioning route into daily segments`,
+          );
+
+          try {
+            const partitionResult = partitionRoute(
+              tspSolution,
+              segmentMetas,
+              matrix,
+              tripStartIndex,
+            );
+
+            const step6Duration = Date.now() - step6Start;
+
+            if (!partitionResult.success) {
+              console.error(`[ROUTE_PLANNER_STEP6_FAILED]`, {
+                duration: `${step6Duration}ms`,
+                errorCode: partitionResult.errorCode,
+                errorDetails: partitionResult.errorDetails,
+                timestamp: new Date().toISOString(),
+              });
+
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: `Route partitioning failed: ${partitionResult.errorDetails}`,
+              });
+            }
+
+            console.log(`[ROUTE_PLANNER_STEP6_COMPLETE]`, {
+              duration: `${step6Duration}ms`,
+              partitionCount: partitionResult.partitions!.length,
+              partitions: partitionResult.partitions!.map((p) => ({
+                day: p.dayNumber,
+                segments: p.segmentIndices.length,
+                distanceKm: Math.round(p.distanceKm),
+                elevationM: Math.round(p.elevationGainM),
+                durationHours: Math.round((p.durationMinutes / 60) * 10) / 10,
+              })),
+              timestamp: new Date().toISOString(),
+            });
+
+            // Build DayRoute objects for the response
+            // Note: This is a simplified geometry - will be enhanced in Commit #5
+            const routes = partitionResult.partitions!.map((partition) => {
+              const segmentsVisited = partition.segmentIndices.map(
+                (segmentIndex) =>
+                  tspSolution.orderedSegments[segmentIndex]!.segmentId,
+              );
+
+              // Create simplified geometry - a straight line between first and last segment
+              // This will be replaced with proper geometry stitching in Commit #5
+              const firstSegmentIndex = partition.segmentIndices[0]!;
+              const lastSegmentIndex =
+                partition.segmentIndices[partition.segmentIndices.length - 1]!;
+              const firstSegment =
+                tspSolution.orderedSegments[firstSegmentIndex]!;
+              const lastSegment =
+                tspSolution.orderedSegments[lastSegmentIndex]!;
+
+              const firstSegmentMeta = segmentMetas.find(
+                (meta) => meta.id === firstSegment.segmentId.toString(),
+              )!;
+              const lastSegmentMeta = segmentMetas.find(
+                (meta) => meta.id === lastSegment.segmentId.toString(),
+              )!;
+
+              const startCoord = firstSegmentMeta.startCoord;
+              const endCoord = lastSegmentMeta.endCoord;
+
+              return {
+                dayNumber: partition.dayNumber,
+                distanceKm: partition.distanceKm,
+                elevationGainM: partition.elevationGainM,
+                geometry: {
+                  type: "LineString" as const,
+                  coordinates: [startCoord, endCoord],
+                },
+                segmentsVisited,
+                durationMinutes: partition.durationMinutes,
+              };
+            });
+
+            // Calculate totals
+            const totalDistanceKm = routes.reduce(
+              (sum, route) => sum + route.distanceKm,
+              0,
+            );
+            const totalElevationGainM = routes.reduce(
+              (sum, route) => sum + route.elevationGainM,
+              0,
+            );
+            const totalDurationMinutes = routes.reduce(
+              (sum, route) => sum + route.durationMinutes,
+              0,
+            );
+
+            const totalPlanDuration = Date.now() - planStart;
+
+            console.log(`[ROUTE_PLANNER_SUCCESS]`, {
+              totalDuration: `${totalPlanDuration}ms`,
+              segmentCount: tspSolution.orderedSegments.length,
+              routeCount: routes.length,
+              totalDistanceKm: Math.round(totalDistanceKm),
+              totalElevationGainM: Math.round(totalElevationGainM),
+              totalDurationHours:
+                Math.round((totalDurationMinutes / 60) * 10) / 10,
+              tspMethod: tspSolution.method,
+              tspSolvingTimeMs: tspSolution.solvingTimeMs,
+              partitioningTimeMs: step6Duration,
+              timestamp: new Date().toISOString(),
+            });
+
+            // Return successful planning result
+            return {
+              ok: true,
+              routes,
+              totalDistanceKm,
+              totalElevationGainM,
+              totalDurationMinutes,
+            };
+          } catch (partitionError) {
+            const step6Duration = Date.now() - step6Start;
+
+            console.error(`[ROUTE_PLANNER_STEP6_ERROR]`, {
+              duration: `${step6Duration}ms`,
+              error:
+                partitionError instanceof Error
+                  ? partitionError.message
+                  : "Unknown error",
+              timestamp: new Date().toISOString(),
+            });
+
+            // If it's already a TRPCError, re-throw it
+            if (partitionError instanceof TRPCError) {
+              throw partitionError;
+            }
+
+            // Otherwise, wrap it in a generic error
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: "Failed to partition route into daily segments",
+            });
+          }
         } catch (error) {
           const step3Duration = Date.now() - step3Start;
 
