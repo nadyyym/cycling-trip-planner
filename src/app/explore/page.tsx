@@ -10,6 +10,9 @@ import {
   type MapBounds,
 } from "~/app/_hooks/useDebouncedBounds";
 import { useSegmentExplore } from "~/app/_hooks/useSegmentExplore";
+import { useSegmentStore } from "~/app/_hooks/useSegmentStore";
+import SegmentListSidebar from "~/app/_components/SegmentListSidebar";
+import { segmentsToGeoJSON, getSegmentBounds } from "~/lib/mapUtils";
 
 // Import Mapbox CSS
 import "mapbox-gl/dist/mapbox-gl.css";
@@ -50,6 +53,30 @@ export default function ExplorePage() {
     isLoading: isLoadingSegments,
     error: segmentError,
   } = useSegmentExplore(debouncedBounds);
+
+  // Segment interaction store
+  const { highlightedSegmentId, setZoomToSegment } = useSegmentStore();
+
+  // Zoom to segment function - using useRef to avoid dependency on segments
+  const segmentsRef = useRef(segments);
+  segmentsRef.current = segments;
+
+  const zoomToSegment = useCallback((segmentId: string) => {
+    const segment = segmentsRef.current.find((s) => s.id === segmentId);
+    if (!segment || !map.current) return;
+
+    const bounds = getSegmentBounds(segment);
+    map.current.fitBounds(bounds, {
+      padding: 50,
+      maxZoom: 15,
+      duration: 1500, // 1.5 second animation as per PRD
+    });
+  }, []); // Empty dependency array since we use ref
+
+  // Set up zoom function in store - run only once
+  useEffect(() => {
+    setZoomToSegment(zoomToSegment);
+  }, [setZoomToSegment, zoomToSegment]); // Include dependencies
 
   const getUserLocation = useCallback(() => {
     setIsLoadingLocation(true);
@@ -248,6 +275,7 @@ export default function ExplorePage() {
       if (map.current) {
         try {
           console.log("Cleaning up map");
+          // Remove the map - this handles all cleanup including event listeners
           map.current.remove();
         } catch (error) {
           console.warn("Error removing map:", error);
@@ -258,6 +286,87 @@ export default function ExplorePage() {
       }
     };
   }, [lat, lng, zoom]); // Include coordinates but handle them carefully to avoid excessive re-renders
+
+  // Update segments on map when data changes
+  useEffect(() => {
+    if (!map.current || !segments.length || !map.current.isStyleLoaded())
+      return;
+
+    const geoJsonData = segmentsToGeoJSON(segments);
+
+    // Remove existing source and layers if they exist
+    try {
+      if (map.current.getSource("segments")) {
+        if (map.current.getLayer("segments-highlighted")) {
+          map.current.removeLayer("segments-highlighted");
+        }
+        if (map.current.getLayer("segments-line")) {
+          map.current.removeLayer("segments-line");
+        }
+        map.current.removeSource("segments");
+      }
+
+      // Add source and layers
+      map.current.addSource("segments", {
+        type: "geojson",
+        data: geoJsonData,
+      });
+
+      // Add the segment lines layer
+      map.current.addLayer({
+        id: "segments-line",
+        type: "line",
+        source: "segments",
+        layout: {
+          "line-join": "round",
+          "line-cap": "round",
+        },
+        paint: {
+          "line-color": "#10b981", // Default green color
+          "line-width": 4,
+        },
+      });
+
+      // Add a layer for highlighted segments
+      map.current.addLayer({
+        id: "segments-highlighted",
+        type: "line",
+        source: "segments",
+        layout: {
+          "line-join": "round",
+          "line-cap": "round",
+        },
+        paint: {
+          "line-color": "#ef4444", // Red color for highlighted segments
+          "line-width": 4,
+        },
+        filter: ["==", ["get", "id"], ""], // Initially no segments highlighted
+      });
+
+      console.log(`Added ${segments.length} segments to map`);
+    } catch (error) {
+      console.warn("Error updating segments on map:", error);
+    }
+  }, [segments]);
+
+  // Update highlighted segment filter
+  useEffect(() => {
+    if (!map.current?.isStyleLoaded()) return;
+
+    const layerId = "segments-highlighted";
+    if (map.current.getLayer(layerId)) {
+      try {
+        // Update the filter to highlight the selected segment
+        const filter = highlightedSegmentId
+          ? ["==", ["get", "id"], highlightedSegmentId]
+          : ["==", ["get", "id"], ""]; // Empty filter shows no segments
+
+        map.current.setFilter(layerId, filter);
+      } catch (error) {
+        console.warn("Error updating segment highlight:", error);
+      }
+    }
+  }, [highlightedSegmentId]);
 
   const handleSearch = async () => {
     if (!searchValue.trim() || !map.current) return;
@@ -278,7 +387,7 @@ export default function ExplorePage() {
 
       const data = (await response.json()) as MapboxGeocodingResponse;
 
-      if (data.features && data.features.length > 0 && data.features[0]) {
+      if (data.features?.[0]) {
         const [lng, lat] = data.features[0].center;
         console.log("Flying to search result:", { lng, lat });
 
@@ -338,200 +447,81 @@ export default function ExplorePage() {
 
       {/* Main content */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
-        <div className="w-80 overflow-y-auto border-r bg-white p-4">
-          <div className="space-y-4">
-            {/* Location controls */}
-            <div className="rounded-lg bg-green-50 p-4">
-              <h3 className="mb-2 text-sm font-medium text-green-900">
-                📍 Current location: Girona, Spain
-              </h3>
-              <button
-                onClick={handleUseMyLocation}
-                disabled={isLoadingLocation}
-                className="w-full rounded-md bg-green-600 px-3 py-2 text-sm text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {isLoadingLocation
-                  ? "Getting your location..."
-                  : locationPermission === "denied"
-                    ? "Location access denied"
-                    : "📍 Use my location"}
-              </button>
-              {locationPermission === "denied" && (
-                <p className="mt-2 text-xs text-green-700">
-                  Enable location permissions to use your current location
-                </p>
-              )}
-            </div>
-
-            {/* Search */}
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Search location
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={searchValue}
-                  onChange={(e) => setSearchValue(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder="Enter city or location..."
-                  className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
+        {/* Sidebar with location controls and segment list */}
+        <div className="flex w-80 flex-col overflow-hidden border-r bg-white">
+          {/* Top section: Location controls and search */}
+          <div className="flex-shrink-0 border-b p-4">
+            <div className="space-y-4">
+              {/* Location controls */}
+              <div className="rounded-lg bg-green-50 p-4">
+                <h3 className="mb-2 text-sm font-medium text-green-900">
+                  📍 Current location: Girona, Spain
+                </h3>
                 <button
-                  onClick={() => void handleSearch()}
-                  className="rounded-md bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  onClick={handleUseMyLocation}
+                  disabled={isLoadingLocation}
+                  className="w-full rounded-md bg-green-600 px-3 py-2 text-sm text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Search
+                  {isLoadingLocation
+                    ? "Getting your location..."
+                    : locationPermission === "denied"
+                      ? "Location access denied"
+                      : "📍 Use my location"}
                 </button>
-              </div>
-            </div>
-
-            {/* Instructions */}
-            <div className="rounded-lg bg-blue-50 p-4">
-              <h3 className="text-sm font-medium text-blue-900">
-                How to explore segments
-              </h3>
-              <ul className="mt-2 space-y-1 text-sm text-blue-800">
-                <li>• Use your location or search for a city</li>
-                <li>• Navigate the map to explore different areas</li>
-                <li>• Segments automatically load as you move the map</li>
-                <li>• Select segments to save for trip planning</li>
-              </ul>
-            </div>
-
-            {/* Map controls */}
-            <div className="space-y-3">
-              <div className="rounded-lg bg-blue-50 p-3">
-                <div className="text-sm text-blue-900">
-                  <div className="font-medium">🔄 Auto-exploring segments</div>
-                  <div className="mt-1 text-blue-700">
-                    Segments are automatically loaded as you move the map
-                  </div>
-                </div>
+                {locationPermission === "denied" && (
+                  <p className="mt-2 text-xs text-green-700">
+                    Enable location permissions to use your current location
+                  </p>
+                )}
               </div>
 
-              <button className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
-                Clear selection
-              </button>
+              {/* Search */}
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  Search location
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={searchValue}
+                    onChange={(e) => setSearchValue(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    placeholder="Enter city or location..."
+                    className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <button
+                    onClick={() => void handleSearch()}
+                    className="rounded-md bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  >
+                    Search
+                  </button>
+                </div>
+              </div>
+
+              {/* Instructions */}
+              <div className="rounded-lg bg-blue-50 p-4">
+                <h3 className="text-sm font-medium text-blue-900">
+                  How to explore segments
+                </h3>
+                <ul className="mt-2 space-y-1 text-sm text-blue-800">
+                  <li>• Use your location or search for a city</li>
+                  <li>• Navigate the map to explore different areas</li>
+                  <li>• Hover cards to highlight segments on map</li>
+                  <li>• Click cards to zoom to segments</li>
+                  <li>• Select segments to save for trip planning</li>
+                </ul>
+              </div>
             </div>
+          </div>
 
-            {/* Segments list */}
-            <div className="border-t pt-4">
-              <h3 className="mb-2 text-sm font-medium text-gray-900">
-                Found segments
-                {isLoadingSegments && (
-                  <span className="ml-2 text-xs text-blue-600">Loading...</span>
-                )}
-                {segments.length > 0 && (
-                  <span className="ml-2 text-xs text-gray-500">
-                    ({segments.length} found)
-                  </span>
-                )}
-              </h3>
-
-              {/* Loading state */}
-              {isLoadingSegments && (
-                <div className="space-y-2">
-                  {Array.from({ length: 3 }).map((_, i) => (
-                    <div key={i} className="animate-pulse">
-                      <div className="mb-2 h-4 w-3/4 rounded bg-gray-200"></div>
-                      <div className="h-3 w-1/2 rounded bg-gray-200"></div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Error state */}
-              {segmentError && (
-                <div className="rounded-md bg-red-50 p-3">
-                  <div className="text-sm text-red-800">
-                    {segmentError.message ===
-                    "Strava account not connected. Please sign in with Strava." ? (
-                      <>
-                        <p className="font-medium">Authentication Required</p>
-                        <p className="mt-1">
-                          Please sign in with Strava to explore segments.
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <p className="font-medium">Failed to load segments</p>
-                        <p className="mt-1">{segmentError.message}</p>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Empty state */}
-              {!isLoadingSegments &&
-                !segmentError &&
-                segments.length === 0 &&
-                debouncedBounds && (
-                  <div className="text-sm text-gray-500">
-                    No segments found in this area. Try zooming out or exploring
-                    a different location.
-                  </div>
-                )}
-
-              {/* No bounds yet */}
-              {!debouncedBounds && !isLoadingSegments && (
-                <div className="text-sm text-gray-500">
-                  Move the map to explore segments in the area
-                </div>
-              )}
-
-              {/* Segments list */}
-              {segments.length > 0 && (
-                <div className="max-h-96 space-y-2 overflow-y-auto">
-                  {segments.map((segment) => (
-                    <div
-                      key={segment.id}
-                      className="rounded-lg border border-gray-200 p-3 transition-colors hover:bg-gray-50"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="min-w-0 flex-1">
-                          <h4 className="truncate text-sm font-medium text-gray-900">
-                            {segment.name}
-                          </h4>
-                          <div className="mt-1 space-y-1 text-xs text-gray-500">
-                            <div className="flex items-center gap-4">
-                              <span>
-                                📏 {(segment.distance / 1000).toFixed(1)} km
-                              </span>
-                              <span>📈 {segment.averageGrade.toFixed(1)}%</span>
-                            </div>
-                            <div className="flex items-center gap-4">
-                              {segment.elevationGain > 0 && (
-                                <span>
-                                  ⛰️ {Math.round(segment.elevationGain)}m
-                                </span>
-                              )}
-                              {segment.komTime && (
-                                <span>🏆 {segment.komTime}</span>
-                              )}
-                              {segment.climbCategory && (
-                                <span className="rounded bg-orange-100 px-1.5 py-0.5 text-xs text-orange-800">
-                                  Cat {segment.climbCategory}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="ml-2 flex-shrink-0">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                            title="Save segment for planning"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+          {/* Bottom section: Segment list */}
+          <div className="flex-1 overflow-hidden">
+            <SegmentListSidebar
+              segments={segments}
+              isLoading={isLoadingSegments}
+              error={segmentError}
+              debouncedBounds={debouncedBounds}
+            />
           </div>
         </div>
 

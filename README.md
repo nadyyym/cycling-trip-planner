@@ -101,6 +101,29 @@ NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN="your-mapbox-token"
 - `json` (jsonb) - itinerary details
 - `createdAt` (timestamp)
 
+## Features
+
+### Explore Segments
+The `/explore` page provides an interactive map-based segment exploration experience:
+
+- **Interactive Map**: Mapbox GL-powered map with segment visualization
+- **Live Segment Loading**: Segments automatically load as you navigate the map
+- **Segment Visualization**: 
+  - Green lines (color: `#10b981`) show discovered segments
+  - Red highlighting (color: `#ef4444`) on hover
+  - Smooth 1.5-second zoom animations when clicking segments
+- **Smart Cards**: Rich segment information cards with:
+  - Distance, elevation gain, average grade
+  - KOM times and climb categorization
+  - Selection checkboxes for trip planning
+  - Hover interactions that highlight segments on map
+- **State Management**: Zustand-powered state for segment interactions
+- **Responsive Design**: Optimized sidebar with location controls and segment list
+- **Accurate Geometry**: Full polyline support via Strava segment detail API
+  - Fetches encoded polylines for all visible segments
+  - Decodes polylines to show exact road paths
+  - Falls back gracefully when polylines unavailable
+
 ## Available Scripts
 
 - `npm run dev` - Start development server
@@ -121,6 +144,27 @@ Strava tokens expire every 6 hours. Run the refresh job:
 ```bash
 npm run cron:start
 ```
+
+## Implementation Status
+
+### ✅ Completed Features
+- **Commit 4-R**: Rich Segment DTO & Debounced Fetch
+  - Extended segment data with distance, elevation, grade, KOM times
+  - Debounced map bounds for efficient API calls
+  - React Query integration with caching
+- **Commit 5-R**: Map Layer + Interactive Cards
+  - Mapbox segment visualization with full road-following geometry
+  - Real-time polyline fetching for accurate segment display
+  - Interactive segment cards with hover/click functionality
+  - Zustand state management for segment interactions
+  - Zoom-to-segment with smooth animations using full geometry bounds
+  - Proper empty states and loading skeletons
+  - Graceful fallback to straight lines when polylines unavailable
+
+### 🚧 Upcoming Features
+- **Commit 6-R**: Save Segment Selection to DB
+- **Commit 7-R**: Caching & Rate-Limit Resilience  
+- **Commit 8-R**: QA, Analytics & Docs
 
 ## Contributing
 

@@ -50,6 +50,7 @@ export interface SegmentDTO {
   lonStart: number;
   latEnd: number;
   lonEnd: number;
+  polyline?: string; // encoded polyline for full geometry
   komTime?: string; // formatted as "mm:ss"
   climbCategory?: string; // "HC", "1", "2", "3", "4"
   elevationGain: number; // in meters
@@ -183,7 +184,7 @@ export class StravaClient {
   }
 
   /**
-   * Explore segments within given bounds
+   * Explore segments within given bounds and fetch their detailed polylines
    */
   async exploreSegments(bounds: BoundsInput): Promise<SegmentDTO[]> {
     const { sw, ne } = bounds;
@@ -198,23 +199,66 @@ export class StravaClient {
         `/segments/explore?bounds=${boundsStr}&activity_type=riding`,
       );
 
-      const segments = data.segments.map((segment): SegmentDTO => {
-        return {
-          id: segment.id.toString(),
-          name: segment.name,
-          distance: segment.distance,
-          averageGrade: segment.avg_grade,
-          latStart: segment.start_latlng[0],
-          lonStart: segment.start_latlng[1],
-          latEnd: segment.end_latlng[0],
-          lonEnd: segment.end_latlng[1],
-          komTime: segment.kom_time ? formatTime(segment.kom_time) : undefined,
-          climbCategory: formatClimbCategory(segment.climb_category),
-          elevationGain: segment.elev_difference,
-        };
-      });
+      console.log(
+        `Found ${data.segments.length} segments, fetching detailed polylines...`,
+      );
 
-      console.log(`Found ${segments.length} segments in bounds`);
+      // Fetch detailed information for each segment to get polylines
+      // We'll do this in batches to avoid hitting rate limits too hard
+      const segments: SegmentDTO[] = [];
+
+      for (const segment of data.segments) {
+        try {
+          // Fetch detailed segment info to get the polyline
+          const detailData =
+            await this.stravaRequest<StravaSegmentDetailResponse>(
+              `/segments/${segment.id}`,
+            );
+
+          segments.push({
+            id: segment.id.toString(),
+            name: segment.name,
+            distance: segment.distance,
+            averageGrade: segment.avg_grade,
+            latStart: segment.start_latlng[0],
+            lonStart: segment.start_latlng[1],
+            latEnd: segment.end_latlng[0],
+            lonEnd: segment.end_latlng[1],
+            polyline: detailData.map.polyline, // Now we have the full polyline!
+            komTime: segment.kom_time
+              ? formatTime(segment.kom_time)
+              : undefined,
+            climbCategory: formatClimbCategory(segment.climb_category),
+            elevationGain: segment.elev_difference,
+          });
+        } catch (error) {
+          console.warn(
+            `Failed to fetch detail for segment ${segment.id}:`,
+            error,
+          );
+          // Fall back to basic segment without polyline
+          segments.push({
+            id: segment.id.toString(),
+            name: segment.name,
+            distance: segment.distance,
+            averageGrade: segment.avg_grade,
+            latStart: segment.start_latlng[0],
+            lonStart: segment.start_latlng[1],
+            latEnd: segment.end_latlng[0],
+            lonEnd: segment.end_latlng[1],
+            // No polyline - will fall back to straight line
+            komTime: segment.kom_time
+              ? formatTime(segment.kom_time)
+              : undefined,
+            climbCategory: formatClimbCategory(segment.climb_category),
+            elevationGain: segment.elev_difference,
+          });
+        }
+      }
+
+      console.log(
+        `Successfully fetched polylines for ${segments.filter((s) => s.polyline).length}/${segments.length} segments`,
+      );
       return segments;
     } catch (error) {
       console.error("Error exploring segments:", error);
