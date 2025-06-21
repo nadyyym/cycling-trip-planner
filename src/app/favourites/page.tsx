@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { auth } from "~/server/auth";
 import { redirect } from "next/navigation";
+import { FavouritesTable } from "./_components/FavouritesTable";
 
 export default async function FavouritesPage() {
   const session = await auth();
@@ -57,22 +58,8 @@ export default async function FavouritesPage() {
             </p>
           </div>
 
-          {/* Coming Soon Message */}
-          <div className="mx-auto max-w-md rounded-lg bg-white p-8 shadow-sm">
-            <div className="text-6xl mb-4">⭐</div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">
-              Favourites Table Coming Soon
-            </h2>
-            <p className="text-gray-600 mb-6">
-              We're building a beautiful table to display all your favourite segments with detailed information.
-            </p>
-            <Link
-              href="/explore"
-              className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-            >
-              Explore Segments
-            </Link>
-          </div>
+          {/* Favourites Table */}
+          <FavouritesTable className="mx-auto max-w-6xl" />
         </div>
       </div>
     </main>
