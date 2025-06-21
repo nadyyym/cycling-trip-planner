@@ -2,6 +2,7 @@ import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { type DefaultSession, type NextAuthConfig } from "next-auth";
 import StravaProvider from "next-auth/providers/strava";
 import { type JWT } from "next-auth/jwt";
+import { eq, sql } from "drizzle-orm";
 
 import { env } from "~/env";
 import { db } from "~/server/db";
@@ -10,7 +11,10 @@ import {
   sessions,
   users,
   verificationTokens,
+  favourites,
+  segments,
 } from "~/server/db/schema";
+import { StravaClient } from "~/server/integrations/strava";
 
 /**
  * Module augmentation for `next-auth` types. Allows us to add custom properties to the `session`
@@ -169,6 +173,118 @@ export const authConfig = {
         profilePresent: !!profile,
         timestamp: new Date().toISOString(),
       });
+
+      // Import Strava starred segments on first login (if user has no favourites yet)
+      if (
+        account?.provider === "strava" &&
+        account.access_token &&
+        account.refresh_token &&
+        user.id
+      ) {
+        try {
+          // Check if user already has favourites (skip if they do)
+          const existingFavourites = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(favourites)
+            .where(eq(favourites.userId, user.id));
+
+          const favouriteCount = existingFavourites[0]?.count ?? 0;
+
+          console.log("[AUTH_STARRED_IMPORT_CHECK]", {
+            userId: user.id,
+            existingFavourites: favouriteCount,
+            timestamp: new Date().toISOString(),
+          });
+
+          if (favouriteCount === 0) {
+            console.log("[AUTH_STARRED_IMPORT_START]", {
+              userId: user.id,
+              timestamp: new Date().toISOString(),
+            });
+
+            // Create Strava client to fetch starred segments
+            const stravaClient = new StravaClient(
+              account.access_token,
+              account.refresh_token,
+              account.expires_at ?? 0,
+              async (tokens) => {
+                // Update tokens in database if refreshed during import
+                console.log("[AUTH_STARRED_IMPORT_TOKEN_REFRESH]", {
+                  userId: user.id,
+                  timestamp: new Date().toISOString(),
+                });
+
+                                 await db
+                   .update(accounts)
+                   .set({
+                     access_token: tokens.accessToken,
+                     refresh_token: tokens.refreshToken,
+                     expires_at: tokens.expiresAt,
+                   })
+                   .where(eq(accounts.userId, user.id!));
+              },
+            );
+
+            // Fetch starred segments from Strava
+            const starredSegments = await stravaClient.getStarredSegments();
+
+            console.log("[AUTH_STARRED_IMPORT_FETCHED]", {
+              userId: user.id,
+              segmentCount: starredSegments.length,
+              timestamp: new Date().toISOString(),
+            });
+
+            if (starredSegments.length > 0) {
+                             // First, insert segments into segments table (ignore conflicts)
+               const segmentData = starredSegments.map((segment) => ({
+                 id: BigInt(segment.id),
+                 name: segment.name,
+                 distance: segment.distance,
+                 averageGrade: segment.averageGrade,
+                 polyline: segment.polyline ?? null,
+                 latStart: segment.latStart,
+                 lonStart: segment.lonStart,
+                 latEnd: segment.latEnd,
+                 lonEnd: segment.lonEnd,
+                 elevHigh: null, // Not available in SegmentDTO, only in SegmentDetailDTO
+                 elevLow: null, // Not available in SegmentDTO, only in SegmentDetailDTO
+                 komTime: segment.komTime ?? null,
+                 climbCategory: segment.climbCategory ?? null,
+                 elevationGain: segment.elevationGain ?? null,
+               }));
+
+              await db.insert(segments).values(segmentData).onConflictDoNothing();
+
+              // Then, add to favourites
+              const favouriteData = starredSegments.map((segment) => ({
+                userId: user.id!,
+                segmentId: BigInt(segment.id),
+              }));
+
+              const result = await db
+                .insert(favourites)
+                .values(favouriteData)
+                .onConflictDoNothing()
+                .returning({ segmentId: favourites.segmentId });
+
+              console.log("[AUTH_STARRED_IMPORT_SUCCESS]", {
+                userId: user.id,
+                segmentsImported: result.length,
+                totalStarred: starredSegments.length,
+                timestamp: new Date().toISOString(),
+              });
+            }
+          }
+        } catch (error) {
+          // Log error but don't fail the sign-in process
+          console.error("[AUTH_STARRED_IMPORT_ERROR]", {
+            userId: user.id,
+            error: error instanceof Error ? error.message : "Unknown error",
+            stack: error instanceof Error ? error.stack : undefined,
+            timestamp: new Date().toISOString(),
+          });
+        }
+      }
     },
     async createUser({ user }) {
       console.log("[AUTH_CREATE_USER]", {
