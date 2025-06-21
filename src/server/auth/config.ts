@@ -75,6 +75,20 @@ export const authConfig = {
     sessionsTable: sessions,
     verificationTokensTable: verificationTokens,
   }),
+  debug: env.NODE_ENV === "development",
+  logger: {
+    error: (code, metadata) => {
+      console.error(`[AUTH_ERROR] ${code}:`, metadata);
+    },
+    warn: (code) => {
+      console.warn(`[AUTH_WARN] ${code}`);
+    },
+    debug: (code, metadata) => {
+      if (env.NODE_ENV === "development") {
+        console.log(`[AUTH_DEBUG] ${code}:`, metadata);
+      }
+    },
+  },
   callbacks: {
     async signIn({ user, account, profile }) {
       console.log("Sign in callback:", {

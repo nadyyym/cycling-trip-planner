@@ -67,6 +67,81 @@ STRAVA_CLIENT_SECRET="your-strava-client-secret"
 NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN="your-mapbox-token"
 ```
 
+## Deployment
+
+### Vercel Deployment
+
+1. **Prepare your production database**:
+   - Set up a PostgreSQL database (recommended: Neon, Supabase, or Railway)
+   - Note your production DATABASE_URL
+
+2. **Configure Strava OAuth**:
+   - Go to [Strava API Settings](https://www.strava.com/settings/api)
+   - Update Authorization Callback Domain to your Vercel domain (e.g., `your-app.vercel.app`)
+   - Note your Client ID and Client Secret
+
+3. **Deploy to Vercel**:
+   ```bash
+   # Connect to Vercel
+   npx vercel
+
+   # Add environment variables
+   vercel env add AUTH_SECRET
+   vercel env add NEXTAUTH_URL
+   vercel env add DATABASE_URL
+   vercel env add STRAVA_CLIENT_ID
+   vercel env add STRAVA_CLIENT_SECRET
+   vercel env add NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN
+
+   # Deploy
+   vercel --prod
+   ```
+
+4. **Required Environment Variables for Production**:
+   ```bash
+   # Generate with: openssl rand -base64 32
+   AUTH_SECRET="your-production-secret-32-chars-long"
+   
+   # Your production domain
+   NEXTAUTH_URL="https://your-app.vercel.app"
+   
+   # Production PostgreSQL database (must support SSL)
+   DATABASE_URL="postgresql://user:password@host:5432/database?sslmode=require"
+   
+   # Strava OAuth credentials
+   STRAVA_CLIENT_ID="your-strava-client-id"
+   STRAVA_CLIENT_SECRET="your-strava-client-secret"
+   
+   # Mapbox token
+   NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN="your-mapbox-token"
+   ```
+
+5. **Run database migrations on production**:
+   ```bash
+   # Set production DATABASE_URL locally
+   export DATABASE_URL="your-production-database-url"
+   
+   # Run migrations
+   npm run db:migrate
+   ```
+
+### Troubleshooting Deployment Issues
+
+**Authentication Not Working:**
+- Ensure `NEXTAUTH_URL` matches your deployed domain exactly
+- Verify Strava OAuth callback domain is set correctly
+- Check that `AUTH_SECRET` is set and sufficiently long (32+ characters)
+
+**Database Connection Errors:**
+- Ensure your production database supports SSL connections
+- Verify DATABASE_URL format: `postgresql://user:password@host:5432/database?sslmode=require`
+- Check that your database accepts connections from Vercel's IP ranges
+
+**Environment Variable Issues:**
+- Use `vercel env ls` to verify all variables are set
+- Ensure no trailing spaces or quotes in environment variable values
+- Redeploy after adding/updating environment variables
+
 ## Database Schema
 
 ### Users
