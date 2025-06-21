@@ -107,6 +107,12 @@ export default function ExplorePage() {
   const { data: savedSegments = [] } =
     api.segment.getMySavedSegments.useQuery();
 
+  // Get favourite count for header badge
+  const { data: favouriteCount } = api.favourite.count.useQuery(undefined, {
+    refetchInterval: 60000, // Refresh every minute
+    staleTime: 0, // Always consider stale for real-time updates
+  });
+
   // Rate limiting handler for segments
   const { isRateLimited: isSegmentRateLimited } = useRateLimitHandler();
 
@@ -532,16 +538,19 @@ export default function ExplorePage() {
           </div>
           <div className="flex items-center gap-4">
             {/* Favourites section moved to header */}
-            <div className="flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2">
+            <Link
+              href="/favourites"
+              className="flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 hover:bg-blue-100 transition-colors"
+            >
               <span className="text-sm font-medium text-blue-900">
-                💖 Favourites
+                ⭐ Favourites
               </span>
-              {savedSegments.length > 0 && (
-                <span className="rounded-full bg-blue-100 px-2 py-1 text-xs text-blue-800">
-                  {savedSegments.length}
+              {favouriteCount && favouriteCount.count > 0 && (
+                <span className="rounded-full bg-blue-500 px-2 py-1 text-xs text-white">
+                  {favouriteCount.count}
                 </span>
               )}
-            </div>
+            </Link>
             <div className="text-sm text-gray-500">
               Lng: {lng} | Lat: {lat} | Zoom: {zoom}
             </div>

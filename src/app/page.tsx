@@ -1,8 +1,12 @@
 import Link from "next/link";
 import { auth, signIn } from "~/server/auth";
+import { api } from "~/trpc/server";
 
 export default async function Home() {
   const session = await auth();
+  
+  // Get favourite count for authenticated users
+  const favouriteCount = session ? await api.favourite.count() : null;
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-white">
@@ -28,6 +32,17 @@ export default async function Home() {
                   className="rounded-md bg-blue-600 px-6 py-3 text-white hover:bg-blue-700"
                 >
                   Explore Segments
+                </Link>
+                <Link
+                  href="/favourites"
+                  className="relative rounded-md border border-gray-300 px-6 py-3 text-gray-700 hover:bg-gray-50"
+                >
+                  ⭐ Favourites
+                  {favouriteCount && favouriteCount.count > 0 && (
+                    <span className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-xs font-medium text-white">
+                      {favouriteCount.count}
+                    </span>
+                  )}
                 </Link>
                 <Link
                   href="/itineraries"
