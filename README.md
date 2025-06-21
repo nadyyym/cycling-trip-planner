@@ -167,6 +167,13 @@ NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN="your-mapbox-token"
 - `elevLow` (float, nullable)
 - `createdAt` (timestamp)
 
+### Favourites
+- `userId` (varchar, FK) - References users.id
+- `segmentId` (bigint, FK) - References segments.id (Strava segment ID)
+- `createdAt` (timestamp)
+- **Composite Primary Key**: (userId, segmentId)
+- **Cascade Delete**: Removes favourites when user or segment is deleted
+
 ### Itineraries
 - `id` (uuid, PK)
 - `userId` (uuid, FK)
@@ -235,6 +242,26 @@ The route planner takes a set of Strava segments and creates optimized multi-day
 - `externalApi`: Mapbox/Strava API errors, network issues, or invalid API responses
 
 **Note**: All route planning errors return HTTP 200 with structured error responses. Only authentication errors return HTTP error codes (401, etc.).
+
+### Favourites System
+The favourites system allows users to save and manage their preferred cycling segments:
+
+- **Automatic Import**: On first login, starred segments from Strava are automatically imported
+- **Favourites Page**: `/favourites` displays a comprehensive table with segment details:
+  - Name (with link to Strava)
+  - Distance, average grade, elevation gain
+  - Climb category and KOM times
+  - Remove action with confirmation
+- **Real-time Badge**: Header shows live count of favourites with optimistic updates
+- **Explore Integration**: 
+  - ⭐ button to add segments to favourites
+  - Star indicators show already-favourited segments
+  - Instant UI updates with proper error handling
+- **API Endpoints**:
+  - `favourite.addMany` - Batch add segments to favourites
+  - `favourite.remove` - Remove single favourite
+  - `favourite.getMyFavourites` - List with joined segment data
+  - `favourite.count` - Get count for header badge
 
 ### Explore Segments
 The `/explore` page provides an interactive map-based segment exploration experience:
@@ -324,6 +351,25 @@ The test script verifies:
 - Accessibility and ARIA compliance
 - Integration in both sidebar and dialog
 
+### Testing Favourites
+
+Test the favourites functionality:
+```bash
+# Start the development server
+npm run dev
+
+# In another terminal, test favourites API
+./examples/test-favourites-create.sh
+./examples/test-favourites-list.sh
+```
+
+The test scripts verify:
+- Adding segments to favourites with batch operations
+- Listing favourites with joined segment data
+- Removing favourites with proper error handling
+- Count endpoint for header badge updates
+- First-login import of Strava starred segments
+
 ## Operations
 
 ### Token Refresh
@@ -335,6 +381,14 @@ npm run cron:start
 ## Implementation Status
 
 ### ✅ Completed Features
+- **Favourites System**: Complete user favourite segments management
+  - Database schema with favourites table (composite PK: userId, segmentId)
+  - tRPC API with addMany, remove, getMyFavourites, count procedures
+  - First-login import of Strava starred segments via NextAuth events
+  - Favourites page with shadcn table, remove actions, and empty states
+  - Header badge with real-time count and optimistic updates
+  - Explore page integration with ⭐ favourite button and indicators
+  - Comprehensive error handling and loading states
 - **Commit 4-R**: Rich Segment DTO & Debounced Fetch
   - Extended segment data with distance, elevation, grade, KOM times
   - Debounced map bounds for efficient API calls
