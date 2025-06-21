@@ -24,6 +24,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "~/components/ui/dialog";
+import { AutocompleteInput } from "../_components/AutocompleteInput";
 
 // Mapbox access token
 mapboxgl.accessToken = env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
@@ -33,6 +34,14 @@ interface MapboxGeocodingResponse {
     center: [number, number];
     place_name: string;
   }>;
+}
+
+interface MapboxSuggestion {
+  id: string;
+  place_name: string;
+  center: [number, number];
+  text: string;
+  place_type: string[];
 }
 
 export default function ExplorePage() {
@@ -471,12 +480,6 @@ export default function ExplorePage() {
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      void handleSearch();
-    }
-  };
-
   const handleUseMyLocation = () => {
     if (locationPermission === "denied") {
       alert(
@@ -486,6 +489,29 @@ export default function ExplorePage() {
     }
 
     getUserLocation();
+  };
+
+  // ==== AUTOCOMPLETE SUGGESTION SELECTION ====
+  // Handle when user selects a suggestion from autocomplete dropdown
+  // Navigates map to the selected location with smooth animation
+  // ============================================
+  const handleSuggestionSelect = (suggestion: MapboxSuggestion) => {
+    if (!map.current) return;
+
+    const [lng, lat] = suggestion.center;
+    console.log("Flying to autocomplete suggestion:", {
+      suggestion: suggestion.place_name,
+      coordinates: { lng, lat },
+    });
+
+    map.current.flyTo({
+      center: [lng, lat],
+      zoom: 12,
+      essential: true,
+    });
+
+    // Clear the search value after selection
+    setSearchValue("");
   };
 
   return (
@@ -529,30 +555,23 @@ export default function ExplorePage() {
         <div className="flex w-80 flex-col overflow-hidden border-r bg-white">
           {/* Search section */}
           <div className="flex-shrink-0 border-b p-4">
-            {/* ==== MINIMAL LOCATION UI (Step 7) ====  */}
-            {/* Removed bulky location section to save 56px+ vertical space */}
-            {/* Location functionality moved to minimal map button */}
-            {/* ===================================== */}
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={searchValue}
-                onChange={(e) => setSearchValue(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder={
-                  locationPermission === "granted"
-                    ? "Enter city or location..."
-                    : "Enter city or use your current location..."
-                }
-                className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-              <button
-                onClick={() => void handleSearch()}
-                className="rounded-md bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-              >
-                Search
-              </button>
-            </div>
+            {/* ==== AUTOCOMPLETE SEARCH (Enhanced) ====  */}
+            {/* Real-time address suggestions with Mapbox geocoding */}
+            {/* Replaces basic search with autocomplete functionality */}
+            {/* =================================================== */}
+            <AutocompleteInput
+              value={searchValue}
+              onChange={setSearchValue}
+              onSelect={handleSuggestionSelect}
+              placeholder={
+                locationPermission === "granted"
+                  ? "Enter city or address..."
+                  : "Enter city or use your current location..."
+              }
+              showSearchButton={true}
+              onSearchClick={() => void handleSearch()}
+              searchButtonText="Search"
+            />
           </div>
 
           {/* Segment list - directly below search without tabs */}
@@ -660,20 +679,17 @@ export default function ExplorePage() {
                       </div>
                     </div>
 
-                    {/* Search form */}
+                    {/* Autocomplete search form */}
                     <div className="space-y-2">
-                      <input
-                        type="text"
+                      <AutocompleteInput
                         value={searchValue}
-                        onChange={(e) => setSearchValue(e.target.value)}
-                        onKeyPress={(e) => {
-                          if (e.key === "Enter") {
-                            void handleSearch();
-                            setIsLocationDialogOpen(false);
-                          }
+                        onChange={setSearchValue}
+                        onSelect={(suggestion) => {
+                          handleSuggestionSelect(suggestion);
+                          setIsLocationDialogOpen(false);
                         }}
-                        placeholder="Enter city name..."
-                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        placeholder="Enter city or address..."
+                        className="w-full"
                       />
                       <button
                         onClick={() => {

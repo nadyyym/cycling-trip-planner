@@ -252,6 +252,14 @@ The `/explore` page provides an interactive map-based segment exploration experi
   - Accessible with ARIA labels and keyboard navigation
   - Modal dialog with current location and search options
   - Smart search placeholder suggests using current location when not granted
+- **Smart Address Autocomplete**: Real-time Mapbox geocoding suggestions
+  - Live address suggestions as you type (300ms debounced)
+  - Up to 5 relevant suggestions with place names and full addresses
+  - Keyboard navigation (Arrow keys, Enter, Escape) and mouse selection
+  - In-memory caching prevents duplicate API calls for better performance
+  - Smooth map navigation to selected locations with automatic input clearing
+  - Full accessibility support with proper ARIA attributes
+  - Works in both sidebar search and location dialog
 - **Segment Visualization**: 
   - Green lines (color: `#10b981`) show discovered segments
   - Red highlighting (color: `#ef4444`) on hover
@@ -297,6 +305,24 @@ The test script verifies:
 - Geometry stitching (routes have >2 coordinates)
 - Elevation and distance calculations
 - Multi-day itinerary generation
+
+### Testing Address Autocomplete
+
+Test the Mapbox address autocomplete functionality:
+```bash
+# Start the development server
+npm run dev
+
+# In another terminal, test autocomplete
+./examples/test-autocomplete.sh
+```
+
+The test script verifies:
+- Real-time address suggestions with debouncing
+- Keyboard navigation and mouse selection
+- Caching and performance optimization
+- Accessibility and ARIA compliance
+- Integration in both sidebar and dialog
 
 ## Operations
 
