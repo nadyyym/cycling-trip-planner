@@ -322,4 +322,139 @@ export const stravaRouter = createTRPCRouter({
         });
       }
     }),
+
+  /**
+   * Get athlete's starred/favorite segments from Strava
+   * Returns segments that the current user has starred on Strava
+   * Includes full segment details with polylines
+   */
+  getStarredSegments: protectedProcedure.query(async ({ ctx }) => {
+    const userId = ctx.session.user.id;
+    const startTime = Date.now();
+
+    console.log(`[STRAVA_STARRED_SEGMENTS_START]`, {
+      userId,
+      timestamp: new Date().toISOString(),
+    });
+
+    try {
+      // Get user's Strava credentials
+      const dbStart = Date.now();
+      const stravaAccount = await ctx.db.query.accounts.findFirst({
+        where: eq(accounts.userId, userId),
+        columns: {
+          access_token: true,
+          refresh_token: true,
+          expires_at: true,
+        },
+      });
+      const dbDuration = Date.now() - dbStart;
+
+      console.log(`[STRAVA_STARRED_DB_QUERY]`, {
+        userId,
+        duration: `${dbDuration}ms`,
+        hasAccount: !!stravaAccount,
+        timestamp: new Date().toISOString(),
+      });
+
+      if (!stravaAccount?.access_token || !stravaAccount?.refresh_token) {
+        console.error(`[STRAVA_STARRED_AUTH_ERROR]`, {
+          userId,
+          error: "Missing Strava credentials",
+          timestamp: new Date().toISOString(),
+        });
+
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "Strava account not connected. Please sign in with Strava.",
+        });
+      }
+
+      // Create Strava client with token refresh callback
+      const stravaClient = new StravaClient(
+        stravaAccount.access_token,
+        stravaAccount.refresh_token,
+        stravaAccount.expires_at ?? 0,
+        async (tokens) => {
+          const tokenUpdateStart = Date.now();
+          console.log(`[STRAVA_STARRED_TOKEN_REFRESH]`, {
+            userId,
+            message: "Updating database with refreshed tokens",
+            timestamp: new Date().toISOString(),
+          });
+
+          // Update tokens in database when they're refreshed
+          await ctx.db
+            .update(accounts)
+            .set({
+              access_token: tokens.accessToken,
+              refresh_token: tokens.refreshToken,
+              expires_at: tokens.expiresAt,
+            })
+            .where(eq(accounts.userId, userId));
+
+          const tokenUpdateDuration = Date.now() - tokenUpdateStart;
+          console.log(`[STRAVA_STARRED_TOKEN_COMPLETE]`, {
+            userId,
+            duration: `${tokenUpdateDuration}ms`,
+            timestamp: new Date().toISOString(),
+          });
+        },
+      );
+
+      // Get starred segments from Strava API
+      const apiStart = Date.now();
+      const starredSegments = await stravaClient.getStarredSegments();
+      const apiDuration = Date.now() - apiStart;
+      const totalDuration = Date.now() - startTime;
+
+      console.log(`[STRAVA_STARRED_SEGMENTS_SUCCESS]`, {
+        userId,
+        segmentCount: starredSegments.length,
+        apiDuration: `${apiDuration}ms`,
+        totalDuration: `${totalDuration}ms`,
+        segments: starredSegments
+          .slice(0, 3)
+          .map((s) => ({ id: s.id, name: s.name })), // Log first 3 for debugging
+        timestamp: new Date().toISOString(),
+      });
+
+      return starredSegments;
+    } catch (error) {
+      const duration = Date.now() - startTime;
+
+      console.error(`[STRAVA_STARRED_SEGMENTS_ERROR]`, {
+        userId,
+        duration: `${duration}ms`,
+        error: error instanceof Error ? error.message : "Unknown error",
+        errorType: error instanceof TRPCError ? error.code : "UNKNOWN",
+        stack: error instanceof Error ? error.stack : undefined,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Handle rate limiting specifically
+      if (error instanceof TRPCError && error.code === "TOO_MANY_REQUESTS") {
+        console.warn(`[STRAVA_STARRED_RATE_LIMIT]`, {
+          userId,
+          retryAfter: (error.cause as { retryAfter?: number })?.retryAfter,
+          message: "Strava rate limit exceeded while fetching starred segments",
+          timestamp: new Date().toISOString(),
+        });
+        // Pass through the rate limit error with retryAfter information
+        throw error;
+      }
+
+      // Re-throw TRPCError as-is
+      if (error instanceof TRPCError) {
+        throw error;
+      }
+
+      // Wrap other errors
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Failed to get starred segments",
+        cause: error,
+      });
+    }
+  }),
 });

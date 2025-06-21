@@ -46,6 +46,7 @@ export default tseslint.config(
         "error",
         { drizzleObjectName: ["db", "ctx.db"] },
       ],
+      "@typescript-eslint/prefer-optional-chain": "off",
     },
   },
   {

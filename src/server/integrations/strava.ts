@@ -34,6 +34,26 @@ interface StravaSegmentDetailResponse {
   elev_difference: number;
 }
 
+interface StravaStarredSegmentResponse {
+  id: number;
+  name: string;
+  distance: number;
+  average_grade: number;
+  start_latlng: [number, number];
+  end_latlng: [number, number];
+  climb_category: number;
+  elevation_high: number;
+  elevation_low: number;
+  map: {
+    polyline: string;
+  };
+  kom?: {
+    elapsed_time: number; // in seconds
+  };
+  elev_difference: number;
+  starred: boolean;
+}
+
 interface StravaTokenRefreshResponse {
   access_token: string;
   refresh_token: string;
@@ -555,6 +575,83 @@ export class StravaClient {
         segmentId,
         error: error instanceof Error ? error.message : "Unknown error",
         duration: `${metaDuration}ms`,
+        stack: error instanceof Error ? error.stack : undefined,
+        timestamp: new Date().toISOString(),
+      });
+
+      throw error;
+    }
+  }
+
+  /**
+   * Get athlete's starred segments
+   * Returns segments that the current athlete has starred/favorited
+   */
+  async getStarredSegments(): Promise<SegmentDTO[]> {
+    const starredStart = Date.now();
+
+    console.log(`[STRAVA_GET_STARRED_SEGMENTS_START]`, {
+      timestamp: new Date().toISOString(),
+    });
+
+    try {
+      const data = await this.stravaRequest<StravaStarredSegmentResponse[]>(
+        `/athlete/segments/starred`,
+      );
+
+      console.log(`[STRAVA_STARRED_SEGMENTS_FOUND]`, {
+        segmentCount: data.length,
+        message: "Processing starred segments",
+        timestamp: new Date().toISOString(),
+      });
+
+      // Convert starred segments to our SegmentDTO format
+      const segments: SegmentDTO[] = data.map((segment) => ({
+        id: segment.id.toString(),
+        name: segment.name,
+        distance: segment.distance,
+        averageGrade: segment.average_grade,
+        latStart: segment.start_latlng[0],
+        lonStart: segment.start_latlng[1],
+        latEnd: segment.end_latlng[0],
+        lonEnd: segment.end_latlng[1],
+        polyline: segment.map.polyline, // Starred segments include full details
+        komTime: segment.kom ? formatTime(segment.kom.elapsed_time) : undefined,
+        climbCategory: formatClimbCategory(segment.climb_category),
+        elevationGain: segment.elev_difference,
+      }));
+
+      const starredDuration = Date.now() - starredStart;
+
+      console.log(`[STRAVA_GET_STARRED_SEGMENTS_SUCCESS]`, {
+        totalSegments: data.length,
+        avgDistance:
+          data.length > 0
+            ? (
+                data.reduce((sum, s) => sum + s.distance, 0) /
+                data.length /
+                1000
+              ).toFixed(1) + "km"
+            : "0km",
+        avgGrade:
+          data.length > 0
+            ? (
+                data.reduce((sum, s) => sum + s.average_grade, 0) / data.length
+              ).toFixed(1) + "%"
+            : "0%",
+        totalElevation:
+          Math.round(data.reduce((sum, s) => sum + s.elev_difference, 0)) + "m",
+        duration: `${starredDuration}ms`,
+        timestamp: new Date().toISOString(),
+      });
+
+      return segments;
+    } catch (error) {
+      const starredDuration = Date.now() - starredStart;
+
+      console.error(`[STRAVA_GET_STARRED_SEGMENTS_ERROR]`, {
+        error: error instanceof Error ? error.message : "Unknown error",
+        duration: `${starredDuration}ms`,
         stack: error instanceof Error ? error.stack : undefined,
         timestamp: new Date().toISOString(),
       });

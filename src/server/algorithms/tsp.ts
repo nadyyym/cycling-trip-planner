@@ -47,7 +47,6 @@ export class TSPSolverError extends Error {
 function isOrToolsAvailable(): boolean {
   try {
     // Use dynamic require with variable to prevent webpack from processing this
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const requireFunc = typeof require !== "undefined" ? require : null;
     if (!requireFunc) return false;
 
@@ -106,7 +105,6 @@ async function solveWithOrTools(
 
   try {
     // Use dynamic require with variable to prevent webpack from processing this
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const requireFunc = typeof require !== "undefined" ? require : null;
     if (!requireFunc) {
       throw new TSPSolverError("require function not available");

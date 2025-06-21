@@ -17,7 +17,7 @@ interface SegmentListSidebarProps {
  * Sidebar component that displays segment cards with interactive features
  * Handles segment selection, highlighting, and zoom-to-segment functionality
  */
-export default function SegmentListSidebar({
+export function SegmentListSidebar({
   segments,
   isLoading,
   error,
@@ -156,7 +156,7 @@ export default function SegmentListSidebar({
               <div className="flex items-center justify-between">
                 <span className="text-sm text-blue-900">
                   {selectedSegmentIds.size} segment
-                  {selectedSegmentIds.size === 1 ? "" : "s"} selected
+                  {selectedSegmentIds.size === 1 ? "" : "s"}
                 </span>
                 <div className="flex gap-2">
                   <button
@@ -171,9 +171,7 @@ export default function SegmentListSidebar({
                     className="rounded-md bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                     title="Save selected segments to your collection"
                   >
-                    {saveSegmentsMutation.isPending
-                      ? "Saving..."
-                      : "Save Selected"}
+                    {saveSegmentsMutation.isPending ? "Saving..." : "Save"}
                   </button>
                 </div>
               </div>

@@ -238,4 +238,67 @@ export const segmentRouter = createTRPCRouter({
         });
       }
     }),
+
+  /**
+   * Get all saved segments for the current user
+   * Returns segments that the user has explicitly saved in the application
+   */
+  getMySavedSegments: protectedProcedure.query(async ({ ctx }) => {
+    const userId = ctx.session.user.id;
+    const startTime = Date.now();
+
+    console.log(`[SEGMENT_GET_SAVED_START]`, {
+      userId,
+      timestamp: new Date().toISOString(),
+    });
+
+    try {
+      const savedSegments = await ctx.db
+        .select()
+        .from(segments)
+        .orderBy(segments.name);
+
+      const result = savedSegments.map((segment) => ({
+        id: segment.id.toString(),
+        name: segment.name,
+        distance: segment.distance,
+        averageGrade: segment.averageGrade,
+        latStart: segment.latStart,
+        lonStart: segment.lonStart,
+        latEnd: segment.latEnd,
+        lonEnd: segment.lonEnd,
+        polyline: segment.polyline ?? undefined,
+        komTime: segment.komTime ?? undefined,
+        climbCategory: segment.climbCategory ?? undefined,
+        elevationGain: segment.elevationGain ?? 0,
+      }));
+
+      const duration = Date.now() - startTime;
+
+      console.log(`[SEGMENT_GET_SAVED_SUCCESS]`, {
+        userId,
+        duration: `${duration}ms`,
+        segmentCount: result.length,
+        timestamp: new Date().toISOString(),
+      });
+
+      return result;
+    } catch (error) {
+      const duration = Date.now() - startTime;
+
+      console.error(`[SEGMENT_GET_SAVED_ERROR]`, {
+        userId,
+        duration: `${duration}ms`,
+        error: error instanceof Error ? error.message : "Unknown error",
+        stack: error instanceof Error ? error.stack : undefined,
+        timestamp: new Date().toISOString(),
+      });
+
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Failed to get saved segments",
+        cause: error,
+      });
+    }
+  }),
 });

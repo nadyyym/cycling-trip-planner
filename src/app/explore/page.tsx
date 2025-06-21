@@ -1,23 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
-
-import { env } from "~/env";
-import {
-  useDebouncedBounds,
-  type MapBounds,
-} from "~/app/_hooks/useDebouncedBounds";
-import { useSegmentExplore } from "~/app/_hooks/useSegmentExplore";
-import { useSegmentStore } from "~/app/_hooks/useSegmentStore";
-import SegmentListSidebar from "~/app/_components/SegmentListSidebar";
-import { segmentsToGeoJSON, getSegmentBounds } from "~/lib/mapUtils";
-
-// Import Mapbox CSS
 import "mapbox-gl/dist/mapbox-gl.css";
+import { env } from "~/env";
+import { SegmentListSidebar } from "../_components/SegmentListSidebar";
+import { useDebouncedBounds } from "../_hooks/useDebouncedBounds";
+import { useSegmentExplore } from "../_hooks/useSegmentExplore";
+import { useSegmentStore } from "../_hooks/useSegmentStore";
+import { useRateLimitHandler } from "../_hooks/useRateLimitHandler";
+import { api } from "~/trpc/react";
+import { segmentsToGeoJSON } from "~/lib/mapUtils";
 
-// Type for Mapbox Geocoding API response
+// Mapbox access token
+mapboxgl.accessToken = env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
+
 interface MapboxGeocodingResponse {
   features: Array<{
     center: [number, number];
@@ -26,26 +24,29 @@ interface MapboxGeocodingResponse {
 }
 
 export default function ExplorePage() {
+  // Map-related state
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const mapInitialized = useRef(false);
-  /**
-   * Guard to ensure we only trigger ONE automatic segment search after the
-   * very first map load. This satisfies PRD Step 1 – Instant Segment Search
-   * on First Load.
-   */
-  const hasInitialSegmentSearch = useRef(false);
-
-  // Default to Girona, Spain - famous cycling destination
-  const [lng, setLng] = useState(2.8214); // Girona longitude
-  const [lat, setLat] = useState(41.9794); // Girona latitude
-  const [zoom, setZoom] = useState(12);
-  const [searchValue, setSearchValue] = useState("");
+  const [lng, setLng] = useState(-0.1276); // London coordinates as fallback
+  const [lat, setLat] = useState(51.5074);
+  const [zoom, setZoom] = useState(10);
   const [mapError, setMapError] = useState<string | null>(null);
+
+  // Location-related state
   const [locationPermission, setLocationPermission] = useState<
-    "unknown" | "granted" | "denied"
-  >("unknown");
+    "granted" | "denied" | "prompt" | null
+  >(null);
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
+
+  // Search state
+  const [searchValue, setSearchValue] = useState("");
+
+  // Map bounds for segment exploration
+  const [mapBounds, setMapBounds] = useState<{
+    sw: [number, number];
+    ne: [number, number];
+  } | null>(null);
 
   // Map tooltip state
   const [mapTooltip, setMapTooltip] = useState<{
@@ -66,207 +67,130 @@ export default function ExplorePage() {
     segment: null,
   });
 
-  // Map bounds state for segment exploration
-  const [mapBounds, setMapBounds] = useState<MapBounds | null>(null);
+  // Use debounced bounds for API calls
+  const debouncedBounds = useDebouncedBounds(mapBounds, 1000);
 
-  // Debounce bounds changes to prevent excessive API calls
-  const debouncedBounds = useDebouncedBounds(mapBounds);
-
-  // Query segments within the current map bounds
+  // Segment exploration hook
   const {
     segments,
     isLoading: isLoadingSegments,
     error: segmentError,
-    isRateLimited: isSegmentRateLimited,
   } = useSegmentExplore(debouncedBounds);
 
-  // Segment interaction store
-  const { highlightedSegmentId, highlightSegment, setZoomToSegment } =
-    useSegmentStore();
+  // Get saved segments (used to be "starred")
+  const { data: savedSegments = [] } =
+    api.segment.getMySavedSegments.useQuery();
 
-  // Zoom to segment function - using useRef to avoid dependency on segments
-  const segmentsRef = useRef(segments);
-  segmentsRef.current = segments;
+  // Rate limiting handler for segments
+  const { isRateLimited: isSegmentRateLimited } = useRateLimitHandler();
 
-  const zoomToSegment = useCallback((segmentId: string) => {
-    const segment = segmentsRef.current.find(
-      (s: { id: string }) => s.id === segmentId,
-    );
-    if (!segment || !map.current) return;
+  // Segment store for selection and highlighting
+  const { highlightedSegmentId, highlightSegment } = useSegmentStore();
 
-    const bounds = getSegmentBounds(segment);
-    map.current.fitBounds(bounds, {
-      padding: 50,
-      maxZoom: 15,
-      duration: 1500, // 1.5 second animation as per PRD
-    });
-  }, []); // Empty dependency array since we use ref
+  // Reference to track if initial segment search has been performed
+  const hasInitialSegmentSearch = useRef(false);
 
-  // Set up zoom function in store - run only once
+  // Initialize Mapbox access token
   useEffect(() => {
-    setZoomToSegment(zoomToSegment);
-  }, [setZoomToSegment, zoomToSegment]); // Include dependencies
+    mapboxgl.accessToken = env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
+  }, []);
 
-  const getUserLocation = useCallback(() => {
+  // Check location permission and try to get user location on mount
+  useEffect(() => {
+    if (typeof navigator !== "undefined" && navigator.geolocation) {
+      navigator.permissions
+        .query({ name: "geolocation" })
+        .then((result) => {
+          setLocationPermission(result.state);
+          if (result.state === "granted") {
+            getUserLocation();
+          }
+        })
+        .catch(() => {
+          // Fallback for browsers that don't support permissions API
+          setLocationPermission("prompt");
+        });
+    }
+  }, []);
+
+  const getUserLocation = () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by this browser.");
+      return;
+    }
+
     setIsLoadingLocation(true);
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const userLng = position.coords.longitude;
-        const userLat = position.coords.latitude;
+    const requestUserLocation = async () => {
+      try {
+        const position = await new Promise<GeolocationPosition>(
+          (resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              timeout: 10000,
+              maximumAge: 60000,
+            });
+          },
+        );
 
-        console.log("User location obtained:", { userLng, userLat });
+        const { latitude, longitude } = position.coords;
+        console.log("Got user location:", { latitude, longitude });
 
-        setLng(userLng);
-        setLat(userLat);
-        setLocationPermission("granted");
-        setIsLoadingLocation(false);
+        // Update coordinates and zoom to user location
+        setLat(latitude);
+        setLng(longitude);
+        setZoom(12);
 
-        // If map is already initialized, fly to user location
+        // If map is initialized, fly to the new location
         if (map.current) {
           map.current.flyTo({
-            center: [userLng, userLat],
-            zoom: 13,
+            center: [longitude, latitude],
+            zoom: 12,
             essential: true,
           });
         }
-      },
-      (error) => {
-        console.error("Error getting user location:", error);
-        setLocationPermission("denied");
-        setIsLoadingLocation(false);
 
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            console.log("User denied the request for geolocation");
-            break;
-          case error.POSITION_UNAVAILABLE:
-            console.log("Location information is unavailable");
-            break;
-          case error.TIMEOUT:
-            console.log("The request to get user location timed out");
-            break;
-        }
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 300000, // 5 minutes
-      },
-    );
-  }, []);
-
-  // Request user's location on component mount
-  useEffect(() => {
-    const requestUserLocation = async () => {
-      if (!navigator.geolocation) {
-        console.log("Geolocation is not supported by this browser");
-        return;
-      }
-
-      try {
-        // Check if we already have permission
-        const permission = await navigator.permissions.query({
-          name: "geolocation",
-        });
-
-        if (permission.state === "granted") {
-          setLocationPermission("granted");
-          getUserLocation();
-        } else if (permission.state === "denied") {
-          setLocationPermission("denied");
-        } else {
-          // Permission is 'prompt' - we'll ask when user clicks the geolocation button
-          setLocationPermission("unknown");
-        }
+        setLocationPermission("granted");
       } catch (error) {
-        console.log("Could not check geolocation permission:", error);
+        console.error("Error getting user location:", error);
+        const geoError = error as GeolocationPositionError;
+        setLocationPermission(geoError?.code === 1 ? "denied" : "prompt");
+      } finally {
+        setIsLoadingLocation(false);
       }
     };
 
     void requestUserLocation();
-  }, [getUserLocation]);
+  };
 
-  // Initialize map - controlled initialization to prevent circular updates
+  // Initialize map
   useEffect(() => {
-    // Set Mapbox access token
-    if (!env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN) {
-      setMapError("Mapbox access token is not configured");
-      return;
-    }
-
-    mapboxgl.accessToken = env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
-
-    // Prevent multiple initializations
+    // Prevent multiple map initializations
     if (mapInitialized.current || !mapContainer.current) return;
 
-    try {
-      console.log("Initializing map with coordinates:", { lng, lat, zoom });
+    console.log("Initializing map with coordinates:", { lng, lat, zoom });
 
-      // Initialize map with current coordinates
+    try {
+      mapInitialized.current = true;
       map.current = new mapboxgl.Map({
         container: mapContainer.current,
         style: "mapbox://styles/mapbox/streets-v12",
         center: [lng, lat],
         zoom: zoom,
-        attributionControl: false,
-        // Improved touch handling for better three-finger drag support
-        touchPitch: true,
-        touchZoomRotate: true,
-        dragPan: true,
-        dragRotate: false, // Disable rotation for simpler interaction
-        keyboard: true,
-        doubleClickZoom: true,
-        scrollZoom: true,
-        boxZoom: true,
-        // Configure interaction options for better gesture handling
-        interactive: true,
-        bearingSnap: 7,
-        pitchWithRotate: false,
       });
 
-      mapInitialized.current = true;
+      console.log("Map created successfully");
 
-      // Add error handling for the map
-      map.current.on("error", (e) => {
-        console.error("Mapbox GL error:", e);
-        setMapError("Map failed to load. Please refresh the page.");
-      });
-
-      // Wait for map to load before adding controls and event listeners
+      // Wait for map to load before setting up event listeners
       map.current.on("load", () => {
         console.log("Map loaded successfully");
-        if (!map.current) return;
 
-        // Add navigation controls
-        map.current.addControl(new mapboxgl.NavigationControl(), "top-right");
-
-        // Add custom geolocate control that respects our permission handling
-        const geolocateControl = new mapboxgl.GeolocateControl({
-          positionOptions: {
-            enableHighAccuracy: true,
-          },
-          trackUserLocation: true,
-          showUserHeading: true,
-        });
-
-        map.current.addControl(geolocateControl, "top-right");
-
-        // Add scale control
-        map.current.addControl(new mapboxgl.ScaleControl(), "bottom-left");
-
-        // Add fullscreen control
-        map.current.addControl(new mapboxgl.FullscreenControl(), "top-right");
-
-        // =============================================
-        // STEP 1 – Instant Segment Search on First Load
-        // Trigger a single bounds update immediately after the style is
-        // fully loaded so that users see segments without having to move
-        // the map. This intentionally bypasses the 400 ms debounce (only
-        // once) and relies on the existing `useSegmentExplore` hook.
+        // ==== AUTOMATIC INITIAL SEGMENT SEARCH (Step 1) ====
+        // This fires an initial search when the map first loads to show
+        // immediate value to users. Uses a ref to ensure it only happens once.
         // =============================================
         if (!hasInitialSegmentSearch.current) {
-          const initialBounds = map.current.getBounds();
+          const initialBounds = map.current!.getBounds();
 
           if (initialBounds) {
             setMapBounds({
@@ -284,7 +208,7 @@ export default function ExplorePage() {
 
         // Update state when map moves - debounced to prevent excessive updates
         let moveTimeout: NodeJS.Timeout;
-        map.current.on("move", () => {
+        map.current!.on("move", () => {
           if (!map.current) return;
 
           // Clear previous timeout to debounce updates
@@ -311,10 +235,10 @@ export default function ExplorePage() {
         });
 
         // Log map interactions for debugging
-        map.current.on("dragstart", () => console.log("Map drag started"));
-        map.current.on("dragend", () => console.log("Map drag ended"));
-        map.current.on("zoomstart", () => console.log("Map zoom started"));
-        map.current.on("zoomend", () => console.log("Map zoom ended"));
+        map.current!.on("dragstart", () => console.log("Map drag started"));
+        map.current!.on("dragend", () => console.log("Map drag ended"));
+        map.current!.on("zoomstart", () => console.log("Map zoom started"));
+        map.current!.on("zoomend", () => console.log("Map zoom ended"));
       });
     } catch (error) {
       console.error("Failed to initialize map:", error);
@@ -328,24 +252,22 @@ export default function ExplorePage() {
       if (map.current) {
         try {
           console.log("Cleaning up map");
-          // Remove the map - this handles all cleanup including event listeners
           map.current.remove();
         } catch (error) {
           console.warn("Error removing map:", error);
-        } finally {
-          map.current = null;
-          mapInitialized.current = false;
         }
+        map.current = null;
+        mapInitialized.current = false;
       }
     };
   }, [lat, lng, zoom]); // Include coordinates but handle them carefully to avoid excessive re-renders
 
   // Update segments on map when data changes
   useEffect(() => {
-    if (!map.current || !segments.length || !map.current.isStyleLoaded())
-      return;
+    if (!map.current || !map.current.isStyleLoaded()) return;
 
-    const geoJsonData = segmentsToGeoJSON(segments);
+    // Always show explore segments (no more tabs)
+    const currentSegments = segments;
 
     // Remove existing source and layers if they exist
     try {
@@ -358,6 +280,14 @@ export default function ExplorePage() {
         }
         map.current.removeSource("segments");
       }
+
+      // If no segments, just clear the map
+      if (!currentSegments.length) {
+        console.log(`Cleared map - no segments to display`);
+        return;
+      }
+
+      const geoJsonData = segmentsToGeoJSON(currentSegments);
 
       // Add source and layers
       map.current.addSource("segments", {
@@ -375,7 +305,7 @@ export default function ExplorePage() {
           "line-cap": "round",
         },
         paint: {
-          "line-color": "#10b981", // Default green color
+          "line-color": "#10b981", // Green for segments
           "line-width": 4,
         },
       });
@@ -390,16 +320,15 @@ export default function ExplorePage() {
           "line-cap": "round",
         },
         paint: {
-          "line-color": "#ec4899", // Pink color for highlighted segments (PRD Step 3)
-          "line-width": 3, // Slightly thinner width as per PRD requirement
+          "line-color": "#ec4899", // Pink color for highlighted segments
+          "line-width": 3,
         },
         filter: ["==", ["get", "id"], ""], // Initially no segments highlighted
       });
 
-      console.log(`Added ${segments.length} segments to map`);
+      console.log(`Added ${currentSegments.length} segments to map`);
 
       // Add hover event listeners for map tooltips
-      // Show tooltip on hover
       map.current.on("mouseenter", "segments-line", (e) => {
         if (!e.features?.[0]) return;
 
@@ -527,7 +456,7 @@ export default function ExplorePage() {
 
   return (
     <div className="flex h-screen flex-col">
-      {/* Header */}
+      {/* Header with Favourites */}
       <header className="border-b bg-white px-4 py-3 shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -542,6 +471,17 @@ export default function ExplorePage() {
             </h1>
           </div>
           <div className="flex items-center gap-4">
+            {/* Favourites section moved to header */}
+            <div className="flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2">
+              <span className="text-sm font-medium text-blue-900">
+                💖 Favourites
+              </span>
+              {savedSegments.length > 0 && (
+                <span className="rounded-full bg-blue-100 px-2 py-1 text-xs text-blue-800">
+                  {savedSegments.length}
+                </span>
+              )}
+            </div>
             <div className="text-sm text-gray-500">
               Lng: {lng} | Lat: {lat} | Zoom: {zoom}
             </div>
@@ -551,9 +491,9 @@ export default function ExplorePage() {
 
       {/* Main content */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar with location controls and segment list */}
+        {/* Sidebar - simplified without tabs */}
         <div className="flex w-80 flex-col overflow-hidden border-r bg-white">
-          {/* Top section: Location controls and search */}
+          {/* Search section */}
           <div className="flex-shrink-0 border-b p-4">
             <div className="space-y-4">
               {/* Location controls */}
@@ -581,9 +521,6 @@ export default function ExplorePage() {
 
               {/* Search */}
               <div>
-                <label className="mb-2 block text-sm font-medium text-gray-700">
-                  Search location
-                </label>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -604,7 +541,7 @@ export default function ExplorePage() {
             </div>
           </div>
 
-          {/* Bottom section: Segment list */}
+          {/* Segment list - directly below search without tabs */}
           <div className="flex-1 overflow-hidden">
             <SegmentListSidebar
               segments={segments}
