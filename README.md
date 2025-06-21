@@ -243,6 +243,80 @@ The route planner takes a set of Strava segments and creates optimized multi-day
 
 **Note**: All route planning errors return HTTP 200 with structured error responses. Only authentication errors return HTTP error codes (401, etc.).
 
+### Trip Planning
+
+The trip planning feature allows users to create multi-day cycling itineraries from selected segments:
+
+**User Workflow**:
+1. **Segment Selection**: Select multiple segments on the `/explore` page using checkboxes
+2. **Trip Planning**: Click "🚴 Plan trip" button to open the trip planning modal
+3. **Route Generation**: System automatically:
+   - Optimizes segment visiting order using TSP algorithms
+   - Creates realistic route geometry between segments
+   - Partitions route into balanced daily stages (40-100km, ≤1000m elevation)
+   - Generates up to 4-day itineraries
+4. **Results Display**: View detailed Markdown itinerary with:
+   - Day-by-day breakdown with distance, elevation, and duration
+   - Segment list with direct Strava links
+   - Copy-to-clipboard functionality for sharing
+5. **Map Visualization**: Planned routes automatically display on map with:
+   - Color-coded daily routes (Blue, Green, Orange, Pink)
+   - Trip start marker
+   - Automatic zoom to trip area
+
+**Example API Request**:
+```bash
+curl -X POST http://localhost:3000/api/trpc/routePlanner.planTrip \
+  -H "Content-Type: application/json" \
+  -d '{
+    "segments": [
+      {"segmentId": 229781, "forwardDirection": true},
+      {"segmentId": 1073806, "forwardDirection": true}
+    ],
+    "maxDays": 4
+  }'
+```
+
+**Example Success Response**:
+```json
+{
+  "ok": true,
+  "routes": [
+    {
+      "dayNumber": 1,
+      "distanceKm": 85.2,
+      "elevationGainM": 890,
+      "segments": [
+        {
+          "id": 229781,
+          "name": "Hawk Hill",
+          "stravaUrl": "https://www.strava.com/segments/229781"
+        }
+      ],
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[-122.4194, 37.7749], ...]
+      },
+      "segmentsVisited": [229781],
+      "durationMinutes": 240
+    }
+  ],
+  "totalDistanceKm": 85.2,
+  "totalElevationGainM": 890,
+  "totalDurationMinutes": 240
+}
+```
+
+**Error Handling**:
+- **Toast Notifications**: Immediate feedback for success/failure
+- **Detailed Error Messages**: Context-specific guidance for resolution
+- **Inline Modal Display**: Markdown-formatted error explanations
+- **Error Types**:
+  - Daily Limit Exceeded: Segment exceeds 100km or 1000m elevation
+  - Need More Days: Route requires more than 4 days
+  - Segments Too Far Apart: Segments cannot be efficiently routed
+  - Service Issues: Temporary Mapbox/Strava API problems
+
 ### Favourites System
 The favourites system allows users to save and manage their preferred cycling segments:
 
@@ -482,8 +556,37 @@ npm run cron:start
 - **Commit 8-P**: Unit & E2E test suite + CI job
 - **Commit 9-P**: Docs & example script
 
+### ✅ Trip Planning UI
+- **Commit 1-T**: Backend schema enhancement with segment names & Strava links ✅
+  - Extended `DayRouteSchema` with `segments` array containing `{id, name, stravaUrl}`
+  - Maintained backwards compatibility with deprecated `segmentsVisited` array
+  - Updated route planner to populate segment details from Strava metadata
+- **Commit 2-T**: TripPlanModal skeleton & routePlanner mutation ✅
+  - Created `useTripPlanner` hook wrapping tRPC mutation with payload conversion
+  - Built `TripPlanModal` component with loading, success, and error states
+  - Implemented automatic trip planning trigger when modal opens
+- **Commit 3-T**: Markdown itinerary rendering with Strava links ✅
+  - Integrated `react-markdown` for rich itinerary display
+  - Created structured Markdown with day-by-day breakdown and segment tables
+  - Added copy-to-clipboard functionality for sharing
+  - Implemented custom components for proper table styling and Strava link handling
+- **Commit 4-T**: "Plan trip" entry point & selection UX ✅
+  - Added trip planning button to segment selection controls
+  - Integrated with existing segment selection state management
+  - Implemented modal trigger with selected segment data conversion
+- **Commit 5-T**: Map visualization of planned routes ✅
+  - Created `useTripRouteStore` Zustand store for trip route state management
+  - Added color-coded route display with day-specific styling
+  - Implemented automatic map centering and zoom to trip start point
+  - Added trip start marker with distinctive styling
+- **Commit 6-T**: UX polish with toast & modal error handling ✅
+  - Integrated toast notifications for success and error feedback
+  - Enhanced error messages with user-friendly descriptions and solutions
+  - Improved Markdown error display with structured problem/solution format
+  - Added comprehensive error mapping for all planner error types
+
 ### 🚧 Frontend Integration
-- **Commit 8-R**: QA, Analytics & Docs
+- **Commit 7-T**: QA, Analytics & Docs
 
 ## Contributing
 

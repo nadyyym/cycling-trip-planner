@@ -27,6 +27,20 @@ export const PlanRequestSchema = z.object({
 export type PlanRequest = z.infer<typeof PlanRequestSchema>;
 
 /**
+ * Segment details for trip planning output
+ */
+export const SegmentDetailSchema = z.object({
+  /** Strava segment ID */
+  id: z.number().int().positive(),
+  /** Segment name from Strava */
+  name: z.string(),
+  /** Direct Strava segment URL */
+  stravaUrl: z.string().url(),
+});
+
+export type SegmentDetail = z.infer<typeof SegmentDetailSchema>;
+
+/**
  * A single day's route with metadata
  */
 export const DayRouteSchema = z.object({
@@ -41,7 +55,9 @@ export const DayRouteSchema = z.object({
     type: z.literal("LineString"),
     coordinates: z.array(z.tuple([z.number(), z.number()])),
   }),
-  /** Segments visited on this day */
+  /** Detailed segment information with names and Strava links */
+  segments: z.array(SegmentDetailSchema),
+  /** @deprecated Use segments array instead. Segments visited on this day (IDs only) */
   segmentsVisited: z.array(z.number().int().positive()),
   /** Estimated duration in minutes */
   durationMinutes: z.number().positive(),

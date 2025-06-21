@@ -10,6 +10,7 @@ import { useDebouncedBounds } from "../_hooks/useDebouncedBounds";
 import { useSegmentExplore } from "../_hooks/useSegmentExplore";
 import { useSegmentStore } from "../_hooks/useSegmentStore";
 import { useRateLimitHandler } from "../_hooks/useRateLimitHandler";
+import { useTripRouteStore } from "../_hooks/useTripRouteStore";
 import { api } from "~/trpc/react";
 import { segmentsToGeoJSON } from "~/lib/mapUtils";
 import {
@@ -118,6 +119,9 @@ export default function ExplorePage() {
 
   // Segment store for selection and highlighting
   const { highlightedSegmentId, highlightSegment } = useSegmentStore();
+
+  // Trip route store for displaying planned routes
+  const { currentTrip, routesVisible } = useTripRouteStore();
 
   // Reference to track if initial segment search has been performed
   const hasInitialSegmentSearch = useRef(false);
@@ -449,6 +453,147 @@ export default function ExplorePage() {
       }
     }
   }, [highlightedSegmentId]);
+
+  // Display trip routes on map
+  useEffect(() => {
+    if (!map.current?.isStyleLoaded()) return;
+
+    // Define colors for different days
+    const dayColors = ["#6366f1", "#10b981", "#f97316", "#ec4899"]; // Blue, Green, Orange, Pink
+
+    // Remove existing trip route layers and sources
+    try {
+      for (let i = 1; i <= 4; i++) {
+        const layerId = `trip-route-day-${i}`;
+        const sourceId = `trip-route-day-${i}-source`;
+        
+        if (map.current.getLayer(layerId)) {
+          map.current.removeLayer(layerId);
+        }
+        if (map.current.getSource(sourceId)) {
+          map.current.removeSource(sourceId);
+        }
+      }
+
+      // Remove trip start marker if it exists
+      if (map.current.getLayer("trip-start-marker")) {
+        map.current.removeLayer("trip-start-marker");
+      }
+      if (map.current.getSource("trip-start-marker-source")) {
+        map.current.removeSource("trip-start-marker-source");
+      }
+    } catch (error) {
+      console.warn("Error removing existing trip route layers:", error);
+    }
+
+    // Add new trip routes if available and visible
+    if (currentTrip && routesVisible) {
+      console.log("[TRIP_ROUTES_DISPLAY]", {
+        routeCount: currentTrip.routes.length,
+        totalDistance: Math.round(currentTrip.totalDistanceKm),
+        startCoordinate: currentTrip.startCoordinate,
+        timestamp: new Date().toISOString(),
+      });
+
+      try {
+        // Add route lines for each day
+        currentTrip.routes.forEach((route) => {
+          const dayNumber = route.dayNumber;
+          const color = dayColors[(dayNumber - 1) % dayColors.length] ?? "#6366f1";
+          const sourceId = `trip-route-day-${dayNumber}-source`;
+          const layerId = `trip-route-day-${dayNumber}`;
+
+          // Add source for this day's route
+          map.current!.addSource(sourceId, {
+            type: "geojson",
+            data: {
+              type: "Feature",
+              properties: {
+                dayNumber,
+                distance: route.distanceKm,
+                elevation: route.elevationGainM,
+                segments: route.segmentNames.join(", "),
+              },
+              geometry: route.geometry,
+            },
+          });
+
+          // Add line layer for this day's route
+          map.current!.addLayer({
+            id: layerId,
+            type: "line",
+            source: sourceId,
+            layout: {
+              "line-join": "round",
+              "line-cap": "round",
+            },
+            paint: {
+              "line-color": color,
+              "line-width": 6,
+              "line-opacity": 0.8,
+            },
+          });
+
+          console.log(`[TRIP_ROUTE_DAY_ADDED]`, {
+            dayNumber,
+            color,
+            coordinateCount: route.geometry.coordinates.length,
+            distance: Math.round(route.distanceKm),
+            elevation: Math.round(route.elevationGainM),
+          });
+        });
+
+        // Add start point marker if available
+        if (currentTrip.startCoordinate) {
+          map.current.addSource("trip-start-marker-source", {
+            type: "geojson",
+            data: {
+              type: "Feature",
+              properties: {
+                title: "Trip Start",
+              },
+              geometry: {
+                type: "Point",
+                coordinates: currentTrip.startCoordinate,
+              },
+            },
+          });
+
+          map.current.addLayer({
+            id: "trip-start-marker",
+            type: "circle",
+            source: "trip-start-marker-source",
+            paint: {
+              "circle-radius": 8,
+              "circle-color": "#ffffff",
+              "circle-stroke-color": "#22c55e",
+              "circle-stroke-width": 3,
+            },
+          });
+
+          // Fly to the start point with appropriate zoom
+          map.current.flyTo({
+            center: currentTrip.startCoordinate,
+            zoom: 11,
+            essential: true,
+          });
+
+          console.log("[TRIP_START_MARKER_ADDED]", {
+            coordinate: currentTrip.startCoordinate,
+            timestamp: new Date().toISOString(),
+          });
+        }
+
+        console.log(`[TRIP_ROUTES_COMPLETE]`, {
+          routesAdded: currentTrip.routes.length,
+          hasStartMarker: !!currentTrip.startCoordinate,
+          timestamp: new Date().toISOString(),
+        });
+      } catch (error) {
+        console.error("Error adding trip routes to map:", error);
+      }
+    }
+  }, [currentTrip, routesVisible]);
 
   const handleSearch = async () => {
     if (!searchValue.trim() || !map.current) return;

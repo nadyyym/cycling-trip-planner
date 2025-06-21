@@ -613,6 +613,26 @@ export const routePlannerRouter = createTRPCRouter({
                   tspSolution.orderedSegments[segmentIndex]!.segmentId,
               );
 
+              // Build detailed segment information with names and Strava URLs
+              const segments = partition.segmentIndices.map((segmentIndex) => {
+                const segmentId = tspSolution.orderedSegments[segmentIndex]!.segmentId;
+                const segmentMeta = segmentMetas.find(
+                  (meta) => meta.id === segmentId.toString(),
+                );
+
+                if (!segmentMeta) {
+                  throw new Error(
+                    `Segment metadata not found for segment ID ${segmentId}`,
+                  );
+                }
+
+                return {
+                  id: segmentId,
+                  name: segmentMeta.name,
+                  stravaUrl: `https://www.strava.com/segments/${segmentId}`,
+                };
+              });
+
               // Extract day-specific geometry from the stitched route
               const dayGeometry = extractDayGeometry(
                 stitchedGeometry,
@@ -626,6 +646,7 @@ export const routePlannerRouter = createTRPCRouter({
                 coordinateCount: dayGeometry.coordinates.length,
                 distanceKm: partition.distanceKm,
                 elevationGainM: partition.elevationGainM,
+                segmentDetails: segments.map((s) => ({ id: s.id, name: s.name })),
               });
 
               return {
@@ -633,7 +654,8 @@ export const routePlannerRouter = createTRPCRouter({
                 distanceKm: partition.distanceKm,
                 elevationGainM: partition.elevationGainM,
                 geometry: dayGeometry,
-                segmentsVisited,
+                segments,
+                segmentsVisited, // Keep for backwards compatibility
                 durationMinutes: partition.durationMinutes,
               };
             });
