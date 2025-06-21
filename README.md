@@ -160,10 +160,28 @@ npm run cron:start
   - Zoom-to-segment with smooth animations using full geometry bounds
   - Proper empty states and loading skeletons
   - Graceful fallback to straight lines when polylines unavailable
+- **Commit 6-R**: Save Segment Selection to DB
+  - Segment save functionality with `segment.saveMany` tRPC mutation
+  - Database persistence using existing segment table
+  - Checkbox selection UI with bulk save operation
+  - Visual badges ("•") indicating already-saved segments
+  - Smart duplicate handling - only saves new segments
+  - Success/error feedback with save count reporting
+  - Pre-selection of saved segments on page reload
+  - Server logging: "Saved X, Skipped Y existing segments"
+- **Commit 7-R**: Caching & Rate-Limit Resilience
+  - LRU cache implementation (200 entries, 5-minute TTL)
+  - Bounds-based cache key generation with coordinate rounding
+  - Automatic cache cleanup and monitoring
+  - Cache hit/miss logging for performance monitoring
+  - Graceful Strava 429 rate limit handling
+  - Toast notifications for rate limit events
+  - Automatic pause of API calls during rate limit periods
+  - Timer-based rate limit expiration with success notifications
+  - Frontend rate limit status indicators
+  - Prevents duplicate API calls within cache TTL window
 
 ### 🚧 Upcoming Features
-- **Commit 6-R**: Save Segment Selection to DB
-- **Commit 7-R**: Caching & Rate-Limit Resilience  
 - **Commit 8-R**: QA, Analytics & Docs
 
 ## Contributing

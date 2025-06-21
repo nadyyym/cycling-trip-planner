@@ -2,12 +2,15 @@
 
 import { useSegmentStore } from "~/app/_hooks/useSegmentStore";
 import { type SegmentDTO } from "~/server/integrations/strava";
+import { api } from "~/trpc/react";
+import { useEffect } from "react";
 
 interface SegmentListSidebarProps {
   segments: SegmentDTO[];
   isLoading: boolean;
   error: { message: string } | null;
   debouncedBounds: { sw: [number, number]; ne: [number, number] } | null;
+  isRateLimited?: boolean;
 }
 
 /**
@@ -19,6 +22,7 @@ export default function SegmentListSidebar({
   isLoading,
   error,
   debouncedBounds,
+  isRateLimited = false,
 }: SegmentListSidebarProps) {
   const {
     highlightedSegmentId,
@@ -28,6 +32,43 @@ export default function SegmentListSidebar({
     clearSelection,
     zoomToSegment,
   } = useSegmentStore();
+
+  // Get saved status for current segments
+  const { data: savedSegmentIds = [] } = api.segment.getSavedStatus.useQuery(
+    { segmentIds: segments.map(s => s.id) },
+    { enabled: segments.length > 0 }
+  );
+
+  // Save segments mutation
+  const saveSegmentsMutation = api.segment.saveMany.useMutation({
+    onSuccess: (result) => {
+      // Show success toast
+      console.log(`Successfully saved ${result.saved} segments, skipped ${result.skipped} existing`);
+      
+      // Clear selection after successful save
+      clearSelection();
+      
+      // Simple alert for now (can be replaced with proper toast later)
+      alert(`✅ Saved ${result.saved} segment${result.saved === 1 ? '' : 's'}${result.skipped > 0 ? `, ${result.skipped} already existed` : ''}`);
+    },
+    onError: (error) => {
+      console.error('Failed to save segments:', error);
+      alert(`❌ Failed to save segments: ${error.message}`);
+    },
+  });
+
+  // Pre-check saved segments when data loads
+  useEffect(() => {
+    if (savedSegmentIds.length > 0) {
+      // Only set saved segments as selected if no segments are currently selected
+      // to avoid overriding user's manual selection
+      const currentSelection = Array.from(selectedSegmentIds);
+      if (currentSelection.length === 0) {
+        const segmentStore = useSegmentStore.getState();
+        segmentStore.setSelectedSegments(savedSegmentIds);
+      }
+    }
+  }, [savedSegmentIds, selectedSegmentIds]);
 
   const handleCardHover = (segmentId: string | null) => {
     highlightSegment(segmentId);
@@ -41,6 +82,34 @@ export default function SegmentListSidebar({
 
   const handleCheckboxChange = (segmentId: string) => {
     toggleSegmentSelection(segmentId);
+  };
+
+  const handleSaveSelected = () => {
+    const selectedSegments = segments.filter(s => selectedSegmentIds.has(s.id));
+    
+    if (selectedSegments.length === 0) {
+      alert('Please select segments to save');
+      return;
+    }
+
+    // Convert SegmentDTO to the format expected by the API
+    const segmentsToSave = selectedSegments.map(segment => ({
+      id: segment.id,
+      name: segment.name,
+      distance: segment.distance,
+      averageGrade: segment.averageGrade,
+      polyline: segment.polyline,
+      latStart: segment.latStart,
+      lonStart: segment.lonStart,
+      latEnd: segment.latEnd,
+      lonEnd: segment.lonEnd,
+      // elevHigh and elevLow are not available in basic SegmentDTO
+      komTime: segment.komTime,
+      climbCategory: segment.climbCategory,
+      elevationGain: segment.elevationGain,
+    }));
+
+    saveSegmentsMutation.mutate({ segments: segmentsToSave });
   };
 
   return (
@@ -76,11 +145,12 @@ export default function SegmentListSidebar({
                     Clear
                   </button>
                   <button
-                    className="rounded-md bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700"
-                    title="Save functionality will be implemented in Commit 6-R"
-                    disabled
+                    onClick={handleSaveSelected}
+                    disabled={saveSegmentsMutation.isPending}
+                    className="rounded-md bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Save selected segments to your collection"
                   >
-                    Save Selected
+                    {saveSegmentsMutation.isPending ? 'Saving...' : 'Save Selected'}
                   </button>
                 </div>
               </div>
@@ -96,6 +166,18 @@ export default function SegmentListSidebar({
                   <div className="h-3 w-1/2 rounded bg-gray-200"></div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Rate limited state */}
+          {isRateLimited && (
+            <div className="rounded-md bg-yellow-50 p-3">
+              <div className="text-sm text-yellow-800">
+                <p className="font-medium">⏳ Strava Rate Limited</p>
+                <p className="mt-1">
+                  Too many requests. Please wait a moment before exploring new areas.
+                </p>
+              </div>
             </div>
           )}
 
@@ -150,6 +232,7 @@ export default function SegmentListSidebar({
               {segments.map((segment) => {
                 const isSelected = selectedSegmentIds.has(segment.id);
                 const isHighlighted = highlightedSegmentId === segment.id;
+                const isSaved = savedSegmentIds.includes(segment.id);
 
                 return (
                   <div
@@ -177,9 +260,19 @@ export default function SegmentListSidebar({
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         {/* Segment name */}
-                        <h4 className="mb-2 truncate text-sm font-medium text-gray-900">
-                          {segment.name}
-                        </h4>
+                        <div className="mb-2 flex items-center gap-2">
+                          <h4 className="truncate text-sm font-medium text-gray-900">
+                            {segment.name}
+                          </h4>
+                          {isSaved && (
+                            <span 
+                              className="flex-shrink-0 text-green-600 text-xs font-medium"
+                              title="Segment already saved"
+                            >
+                              •
+                            </span>
+                          )}
+                        </div>
 
                         {/* Distance and elevation row */}
                         <div className="mb-1 flex items-center gap-4 text-xs text-gray-600">

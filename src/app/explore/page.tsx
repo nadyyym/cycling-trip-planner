@@ -52,6 +52,7 @@ export default function ExplorePage() {
     segments,
     isLoading: isLoadingSegments,
     error: segmentError,
+    isRateLimited: isSegmentRateLimited,
   } = useSegmentExplore(debouncedBounds);
 
   // Segment interaction store
@@ -62,7 +63,7 @@ export default function ExplorePage() {
   segmentsRef.current = segments;
 
   const zoomToSegment = useCallback((segmentId: string) => {
-    const segment = segmentsRef.current.find((s) => s.id === segmentId);
+    const segment = segmentsRef.current.find((s: any) => s.id === segmentId);
     if (!segment || !map.current) return;
 
     const bounds = getSegmentBounds(segment);
@@ -521,6 +522,7 @@ export default function ExplorePage() {
               isLoading={isLoadingSegments}
               error={segmentError}
               debouncedBounds={debouncedBounds}
+              isRateLimited={isSegmentRateLimited}
             />
           </div>
         </div>
