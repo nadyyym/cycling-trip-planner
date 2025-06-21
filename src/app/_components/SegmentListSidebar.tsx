@@ -266,7 +266,7 @@ export default function SegmentListSidebar({
                     key={segment.id}
                     className={`cursor-pointer rounded-lg border p-3 transition-all duration-200 ${
                       isHighlighted
-                        ? "border-red-300 bg-red-50 shadow-md"
+                        ? "border-pink-300 bg-pink-50 shadow-md"
                         : isSelected
                           ? "border-blue-300 bg-blue-50"
                           : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"

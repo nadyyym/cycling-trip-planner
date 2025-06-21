@@ -47,6 +47,25 @@ export default function ExplorePage() {
   >("unknown");
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
 
+  // Map tooltip state
+  const [mapTooltip, setMapTooltip] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    segment: {
+      id: string;
+      name: string;
+      distance: number;
+      averageGrade: number;
+      elevationGain: number;
+    } | null;
+  }>({
+    visible: false,
+    x: 0,
+    y: 0,
+    segment: null,
+  });
+
   // Map bounds state for segment exploration
   const [mapBounds, setMapBounds] = useState<MapBounds | null>(null);
 
@@ -62,7 +81,8 @@ export default function ExplorePage() {
   } = useSegmentExplore(debouncedBounds);
 
   // Segment interaction store
-  const { highlightedSegmentId, setZoomToSegment } = useSegmentStore();
+  const { highlightedSegmentId, highlightSegment, setZoomToSegment } =
+    useSegmentStore();
 
   // Zoom to segment function - using useRef to avoid dependency on segments
   const segmentsRef = useRef(segments);
@@ -370,17 +390,68 @@ export default function ExplorePage() {
           "line-cap": "round",
         },
         paint: {
-          "line-color": "#ef4444", // Red color for highlighted segments
-          "line-width": 4,
+          "line-color": "#ec4899", // Pink color for highlighted segments (PRD Step 3)
+          "line-width": 3, // Slightly thinner width as per PRD requirement
         },
         filter: ["==", ["get", "id"], ""], // Initially no segments highlighted
       });
 
       console.log(`Added ${segments.length} segments to map`);
+
+      // Add hover event listeners for map tooltips
+      // Show tooltip on hover
+      map.current.on("mouseenter", "segments-line", (e) => {
+        if (!e.features?.[0]) return;
+
+        const feature = e.features[0];
+        const properties = feature.properties;
+        if (!properties) return;
+
+        map.current!.getCanvas().style.cursor = "pointer";
+
+        setMapTooltip({
+          visible: true,
+          x: e.point.x,
+          y: e.point.y,
+          segment: {
+            id: String(properties.id),
+            name: String(properties.name),
+            distance: Number(properties.distance),
+            averageGrade: Number(properties.averageGrade),
+            elevationGain: Number(properties.elevationGain),
+          },
+        });
+
+        // Also highlight the segment
+        highlightSegment(String(properties.id));
+      });
+
+      // Update tooltip position on mouse move
+      map.current.on("mousemove", "segments-line", (e) => {
+        setMapTooltip((prev) => ({
+          ...prev,
+          x: e.point.x,
+          y: e.point.y,
+        }));
+      });
+
+      // Hide tooltip on mouse leave
+      map.current.on("mouseleave", "segments-line", () => {
+        map.current!.getCanvas().style.cursor = "";
+        setMapTooltip({
+          visible: false,
+          x: 0,
+          y: 0,
+          segment: null,
+        });
+
+        // Remove highlight
+        highlightSegment(null);
+      });
     } catch (error) {
       console.warn("Error updating segments on map:", error);
     }
-  }, [segments]);
+  }, [segments, highlightSegment]);
 
   // Update highlighted segment filter
   useEffect(() => {
@@ -581,6 +652,36 @@ export default function ExplorePage() {
                   </div>
                 </div>
               </div>
+
+              {/* Map tooltip - appears when hovering over segments */}
+              {mapTooltip.visible && mapTooltip.segment && (
+                <div
+                  className="pointer-events-none absolute z-50 rounded-md bg-gray-900 px-3 py-2 text-sm text-white shadow-lg"
+                  style={{
+                    left: mapTooltip.x + 10,
+                    top: mapTooltip.y - 10,
+                    transform: "translateY(-100%)",
+                  }}
+                >
+                  <div className="space-y-1">
+                    <p className="font-medium">{mapTooltip.segment.name}</p>
+                    <div className="flex items-center gap-3 text-xs">
+                      <span>
+                        📏 {(mapTooltip.segment.distance / 1000).toFixed(1)} km
+                      </span>
+                      <span>
+                        📈 {mapTooltip.segment.averageGrade.toFixed(1)}%
+                      </span>
+                    </div>
+                    {mapTooltip.segment.elevationGain > 0 && (
+                      <p className="text-xs">
+                        ⛰️ {Math.round(mapTooltip.segment.elevationGain)}m
+                        elevation
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>

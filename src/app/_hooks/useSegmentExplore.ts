@@ -2,6 +2,7 @@ import { api } from "~/trpc/react";
 import { type MapBounds, roundBounds } from "./useDebouncedBounds";
 import { useRateLimitHandler } from "./useRateLimitHandler";
 import { useEffect } from "react";
+import { skipToken } from "@tanstack/react-query";
 
 /**
  * Custom hook for exploring Strava segments within map bounds
@@ -15,12 +16,18 @@ export function useSegmentExplore(bounds: MapBounds | null) {
   // Round bounds to reduce cache misses for nearly identical requests
   const roundedBounds = bounds ? roundBounds(bounds) : null;
 
-  const query = api.strava.segmentExplore.useQuery(
-    roundedBounds ?? { sw: [0, 0], ne: [0, 0] }, // Safe default when bounds are null
-    {
-      // Only run query when bounds are available and not rate limited
-      enabled: !!roundedBounds && !isRateLimited,
+  // Debug logging to track bounds changes
+  console.log("[SEGMENT_EXPLORE_HOOK]", {
+    inputBounds: bounds,
+    roundedBounds,
+    isRateLimited,
+    shouldSkip: !roundedBounds || isRateLimited,
+    timestamp: new Date().toISOString(),
+  });
 
+  const query = api.strava.segmentExplore.useQuery(
+    !roundedBounds || isRateLimited ? skipToken : roundedBounds,
+    {
       // Cache for 5 minutes to avoid duplicate requests
       staleTime: 5 * 60 * 1000, // 5 minutes
 

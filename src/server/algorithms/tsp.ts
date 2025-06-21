@@ -41,12 +41,18 @@ export class TSPSolverError extends Error {
 }
 
 /**
- * Check if OR-Tools is available
+ * Check if OR-Tools is available for use
+ * Uses dynamic require to avoid webpack bundling issues
  */
 function isOrToolsAvailable(): boolean {
   try {
+    // Use dynamic require with variable to prevent webpack from processing this
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    require("node_or_tools");
+    const requireFunc = typeof require !== "undefined" ? require : null;
+    if (!requireFunc) return false;
+
+    const moduleName = "node" + "_or" + "_tools"; // Split string to avoid webpack detection
+    requireFunc(moduleName);
     return true;
   } catch (error) {
     console.log(`[TSP_SOLVER_ORTOOLS_UNAVAILABLE]`, {
@@ -99,9 +105,15 @@ async function solveWithOrTools(
   const solveStart = Date.now();
 
   try {
-    // Attempt to require OR-Tools
+    // Use dynamic require with variable to prevent webpack from processing this
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const ortools = require("node_or_tools") as OrToolsModule;
+    const requireFunc = typeof require !== "undefined" ? require : null;
+    if (!requireFunc) {
+      throw new TSPSolverError("require function not available");
+    }
+
+    const moduleName = "node" + "_or" + "_tools"; // Split string to avoid webpack detection
+    const ortools = requireFunc(moduleName) as OrToolsModule;
 
     console.log(`[TSP_SOLVER_ORTOOLS_START]`, {
       segmentCount: segments.length,
