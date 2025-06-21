@@ -219,8 +219,11 @@ export default function SegmentListSidebar({
                   </>
                 ) : (
                   <>
-                    <p className="font-medium">Failed to load segments</p>
-                    <p className="mt-1">{error.message}</p>
+                    <p className="font-medium">No segments found</p>
+                    <p className="mt-1">
+                      Change your location or zoom level or use address search
+                      bar
+                    </p>
                   </>
                 )}
               </div>

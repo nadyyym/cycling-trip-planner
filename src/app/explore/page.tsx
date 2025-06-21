@@ -530,20 +530,6 @@ export default function ExplorePage() {
                   </button>
                 </div>
               </div>
-
-              {/* Instructions */}
-              <div className="rounded-lg bg-blue-50 p-4">
-                <h3 className="text-sm font-medium text-blue-900">
-                  How to explore segments
-                </h3>
-                <ul className="mt-2 space-y-1 text-sm text-blue-800">
-                  <li>• Use your location or search for a city</li>
-                  <li>• Navigate the map to explore different areas</li>
-                  <li>• Hover cards to highlight segments on map</li>
-                  <li>• Use map icon to zoom to specific segments</li>
-                  <li>• Select segments to save for trip planning</li>
-                </ul>
-              </div>
             </div>
           </div>
 
