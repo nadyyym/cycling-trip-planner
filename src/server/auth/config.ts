@@ -77,8 +77,8 @@ export const authConfig = {
   }),
   debug: env.NODE_ENV === "development",
   logger: {
-    error: (code, metadata) => {
-      console.error(`[AUTH_ERROR] ${code}:`, metadata);
+    error: (error) => {
+      console.error("[AUTH_ERROR]", error);
     },
     warn: (code) => {
       console.warn(`[AUTH_WARN] ${code}`);
