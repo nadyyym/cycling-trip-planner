@@ -540,7 +540,7 @@ export default function ExplorePage() {
                   <li>• Use your location or search for a city</li>
                   <li>• Navigate the map to explore different areas</li>
                   <li>• Hover cards to highlight segments on map</li>
-                  <li>• Click cards to zoom to segments</li>
+                  <li>• Use map icon to zoom to specific segments</li>
                   <li>• Select segments to save for trip planning</li>
                 </ul>
               </div>

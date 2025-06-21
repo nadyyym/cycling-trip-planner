@@ -79,7 +79,22 @@ export default function SegmentListSidebar({
   };
 
   const handleCardClick = (segmentId: string) => {
+    // =============================================
+    // STEP 2 – Disable Zoom-to-Segment on Click
+    // Default click no longer zooms to maintain helicopter view.
+    // Users can still zoom via the explicit map icon button.
+    // =============================================
+    console.log("[SEGMENT_CARD_CLICK_NO_ZOOM]", { segmentId });
+    // No automatic zoom - just highlight the segment
+    highlightSegment(segmentId);
+  };
+
+  const handleZoomToSegment = (segmentId: string, event: React.MouseEvent) => {
+    // Prevent card click event from firing
+    event.stopPropagation();
+
     if (zoomToSegment) {
+      console.log("[SEGMENT_ZOOM_EXPLICIT]", { segmentId });
       zoomToSegment(segmentId);
     }
   };
@@ -255,16 +270,16 @@ export default function SegmentListSidebar({
                     }`}
                     onMouseEnter={() => handleCardHover(segment.id)}
                     onMouseLeave={() => handleCardHover(null)}
-                    onClick={() => handleCardClick(segment.id)}
-                    role="button"
-                    tabIndex={0}
+                    onClick={(_e) => handleCardClick(segment.id)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
                         handleCardClick(segment.id);
                       }
                     }}
-                    aria-label={`Zoom to segment: ${segment.name}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`View segment: ${segment.name}`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
@@ -313,8 +328,31 @@ export default function SegmentListSidebar({
                         </div>
                       </div>
 
-                      {/* Save checkbox */}
-                      <div className="flex-shrink-0">
+                      {/* Action buttons */}
+                      <div className="flex flex-shrink-0 items-center gap-2">
+                        {/* Zoom to segment button */}
+                        <button
+                          onClick={(e) => handleZoomToSegment(segment.id, e)}
+                          className="flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                          title="Zoom to segment on map"
+                          aria-label={`Zoom to ${segment.name} on map`}
+                        >
+                          <svg
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
+                            />
+                          </svg>
+                        </button>
+
+                        {/* Save checkbox */}
                         <input
                           type="checkbox"
                           checked={isSelected}
