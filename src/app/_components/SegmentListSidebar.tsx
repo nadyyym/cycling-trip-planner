@@ -33,18 +33,33 @@ export function SegmentListSidebar({
     zoomToSegment,
   } = useSegmentStore();
 
-  // Get saved status for current segments
-  const { data: savedSegmentIds = [] } = api.segment.getSavedStatus.useQuery(
-    { segmentIds: segments.map((s) => s.id) },
-    { enabled: segments.length > 0 },
-  );
+  // Get favourites to check which segments are already favourited
+  const { data: favourites = [] } = api.favourite.getMyFavourites.useQuery();
+  const favouriteSegmentIds = favourites.map((fav) => fav.id);
 
-  // Save segments mutation
-  const saveSegmentsMutation = api.segment.saveMany.useMutation({
+  // Add to favourites mutation with optimistic updates
+  const utils = api.useUtils();
+  const addFavouritesMutation = api.favourite.addMany.useMutation({
+    onMutate: async (variables) => {
+      // Cancel outgoing refetches
+      await utils.favourite.getMyFavourites.cancel();
+      await utils.favourite.count.cancel();
+
+      // Snapshot previous values
+      const previousFavourites = utils.favourite.getMyFavourites.getData();
+      const previousCount = utils.favourite.count.getData();
+
+      // Optimistically update count (estimate increase)
+      utils.favourite.count.setData(undefined, (old) => ({
+        count: (old?.count ?? 0) + variables.segments.length,
+      }));
+
+      return { previousFavourites, previousCount };
+    },
     onSuccess: (result) => {
       // Show success toast
       console.log(
-        `Successfully saved ${result.saved} segments, skipped ${result.skipped} existing`,
+        `Successfully added ${result.added} favourites, skipped ${result.skipped} existing`,
       );
 
       // Clear selection after successful save
@@ -52,27 +67,41 @@ export function SegmentListSidebar({
 
       // Simple alert for now (can be replaced with proper toast later)
       alert(
-        `✅ Saved ${result.saved} segment${result.saved === 1 ? "" : "s"}${result.skipped > 0 ? `, ${result.skipped} already existed` : ""}`,
+        `⭐ Added ${result.added} favourite${result.added === 1 ? "" : "s"}${result.skipped > 0 ? `, ${result.skipped} already existed` : ""}`,
       );
     },
-    onError: (error) => {
-      console.error("Failed to save segments:", error);
-      alert(`❌ Failed to save segments: ${error.message}`);
+    onError: (error, variables, context) => {
+      console.error("Failed to add favourites:", error);
+      
+      // Revert optimistic updates on error
+      if (context?.previousFavourites) {
+        utils.favourite.getMyFavourites.setData(undefined, context.previousFavourites);
+      }
+      if (context?.previousCount) {
+        utils.favourite.count.setData(undefined, context.previousCount);
+      }
+      
+      alert(`❌ Failed to add favourites: ${error.message}`);
+    },
+    onSettled: () => {
+      // Refetch to ensure consistency
+      void utils.favourite.getMyFavourites.invalidate();
+      void utils.favourite.count.invalidate();
     },
   });
 
-  // Pre-check saved segments when data loads
+  // Pre-check favourited segments when data loads
   useEffect(() => {
-    if (savedSegmentIds.length > 0) {
-      // Only set saved segments as selected if no segments are currently selected
+    if (favouriteSegmentIds.length > 0) {
+      // Only set favourited segments as selected if no segments are currently selected
       // to avoid overriding user's manual selection
       const currentSelection = Array.from(selectedSegmentIds);
       if (currentSelection.length === 0) {
         const segmentStore = useSegmentStore.getState();
-        segmentStore.setSelectedSegments(savedSegmentIds);
+        segmentStore.setSelectedSegments(favouriteSegmentIds);
       }
     }
-  }, [savedSegmentIds, selectedSegmentIds]);
+  }, [favouriteSegmentIds, selectedSegmentIds]);
 
   const handleCardHover = (segmentId: string | null) => {
     highlightSegment(segmentId);
@@ -103,13 +132,13 @@ export function SegmentListSidebar({
     toggleSegmentSelection(segmentId);
   };
 
-  const handleSaveSelected = () => {
+  const handleAddFavourites = () => {
     const selectedSegments = segments.filter((s) =>
       selectedSegmentIds.has(s.id),
     );
 
     if (selectedSegments.length === 0) {
-      alert("Please select segments to save");
+      alert("Please select segments to add to favourites");
       return;
     }
 
@@ -130,7 +159,7 @@ export function SegmentListSidebar({
       elevationGain: segment.elevationGain,
     }));
 
-    saveSegmentsMutation.mutate({ segments: segmentsToSave });
+    addFavouritesMutation.mutate({ segments: segmentsToSave });
   };
 
   return (
@@ -166,12 +195,12 @@ export function SegmentListSidebar({
                     Clear
                   </button>
                   <button
-                    onClick={handleSaveSelected}
-                    disabled={saveSegmentsMutation.isPending}
+                    onClick={handleAddFavourites}
+                    disabled={addFavouritesMutation.isPending}
                     className="rounded-md bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                    title="Save selected segments to your collection"
+                    title="Add selected segments to favourites"
                   >
-                    {saveSegmentsMutation.isPending ? "Saving..." : "Save"}
+                    {addFavouritesMutation.isPending ? "Adding..." : "⭐ Favourite"}
                   </button>
                 </div>
               </div>
@@ -257,7 +286,7 @@ export function SegmentListSidebar({
               {segments.map((segment) => {
                 const isSelected = selectedSegmentIds.has(segment.id);
                 const isHighlighted = highlightedSegmentId === segment.id;
-                const isSaved = savedSegmentIds.includes(segment.id);
+                const isFavourited = favouriteSegmentIds.includes(segment.id);
 
                 return (
                   <div
@@ -289,12 +318,12 @@ export function SegmentListSidebar({
                           <h4 className="truncate text-sm font-medium text-gray-900">
                             {segment.name}
                           </h4>
-                          {isSaved && (
+                          {isFavourited && (
                             <span
-                              className="flex-shrink-0 text-xs font-medium text-green-600"
-                              title="Segment already saved"
+                              className="flex-shrink-0 text-xs font-medium text-yellow-600"
+                              title="Segment already favourited"
                             >
-                              •
+                              ⭐
                             </span>
                           )}
                         </div>
@@ -362,8 +391,8 @@ export function SegmentListSidebar({
                             handleCheckboxChange(segment.id);
                           }}
                           className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                          title="Save segment for planning"
-                          aria-label={`Save ${segment.name} for planning`}
+                          title="Add segment to favourites"
+                          aria-label={`Add ${segment.name} to favourites`}
                         />
                       </div>
                     </div>
