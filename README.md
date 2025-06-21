@@ -1,29 +1,141 @@
-# Create T3 App
+# Cycling Trip Planner 🚲
 
-This is a [T3 Stack](https://create.t3.gg/) project bootstrapped with `create-t3-app`.
+A smart cycling trip planner that helps you discover amazing cycling segments and build multi-day itineraries.
 
-## What's next? How do I make an app with this?
+## Vision
 
-We try to keep this project as simple as possible, so you can start with just the scaffolding we set up for you, and add additional things later when they become necessary.
+Plan epic cycling trips by:
+- 🗺️ Discovering cycling segments through map exploration or city search
+- 🎯 Selecting your favorite segments from Strava's database
+- 📅 Building multi-day itineraries with half-day cycling routes (≤7 hours)
+- 🏨 Finding accommodations and transportation (coming soon)
 
-If you are not familiar with the different technologies used in this project, please refer to the respective docs. If you still are in the wind, please join our [Discord](https://t3.gg/discord) and ask for help.
+## Tech Stack
 
-- [Next.js](https://nextjs.org)
-- [NextAuth.js](https://next-auth.js.org)
-- [Prisma](https://prisma.io)
-- [Drizzle](https://orm.drizzle.team)
-- [Tailwind CSS](https://tailwindcss.com)
-- [tRPC](https://trpc.io)
+- **Frontend**: Next.js 15 + Tailwind CSS + shadcn/ui
+- **Backend**: tRPC + Drizzle ORM + PostgreSQL
+- **Auth**: NextAuth.js with Strava OAuth
+- **Maps**: Mapbox GL JS
+- **Integrations**: Strava API for segments and routes
 
-## Learn More
+## Quick Start
 
-To learn more about the [T3 Stack](https://create.t3.gg/), take a look at the following resources:
+1. **Setup environment**:
+   ```bash
+   cp .env.example .env.local
+   # Add your API keys (see Environment Variables section)
+   ```
 
-- [Documentation](https://create.t3.gg/)
-- [Learn the T3 Stack](https://create.t3.gg/en/faq#what-learning-resources-are-currently-available) — Check out these awesome tutorials
+2. **Install dependencies**:
+   ```bash
+   npm install
+   ```
 
-You can check out the [create-t3-app GitHub repository](https://github.com/t3-oss/create-t3-app) — your feedback and contributions are welcome!
+3. **Setup database**:
+   ```bash
+   # Start local PostgreSQL (Docker required)
+   ./start-database.sh
+   
+   # Run migrations
+   npm run db:migrate
+   ```
 
-## How do I deploy this?
+4. **Start development server**:
+   ```bash
+   npm run dev
+   ```
 
-Follow our deployment guides for [Vercel](https://create.t3.gg/en/deployment/vercel), [Netlify](https://create.t3.gg/en/deployment/netlify) and [Docker](https://create.t3.gg/en/deployment/docker) for more information.
+5. **Open browser**: http://localhost:3000
+
+## Environment Variables
+
+Create `.env.local` with:
+
+```bash
+# Database
+DATABASE_URL="postgresql://postgres:password@localhost:5432/cycling_planner"
+
+# NextAuth
+NEXTAUTH_SECRET="your-secret-here"
+NEXTAUTH_URL="http://localhost:3000"
+
+# Strava OAuth
+STRAVA_CLIENT_ID="your-strava-client-id"
+STRAVA_CLIENT_SECRET="your-strava-client-secret"
+
+# Mapbox
+NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN="your-mapbox-token"
+```
+
+## Database Schema
+
+### Users
+- `id` (uuid, PK)
+- `stravaId` (string, unique)
+- `name` (string)
+- `accessToken` (string)
+- `refreshToken` (string)
+- `expiresAt` (timestamp)
+- `createdAt` (timestamp)
+
+### Segments
+- `id` (bigint, PK) - Strava segment ID
+- `name` (string)
+- `distance` (float) - in meters
+- `averageGrade` (float) - percentage
+- `polyline` (string) - encoded polyline
+- `latStart` (float)
+- `lonStart` (float)
+- `latEnd` (float)
+- `lonEnd` (float)
+- `elevHigh` (float, nullable)
+- `elevLow` (float, nullable)
+- `createdAt` (timestamp)
+
+### Itineraries
+- `id` (uuid, PK)
+- `userId` (uuid, FK)
+- `name` (string)
+- `startDate` (date)
+- `endDate` (date)
+- `json` (jsonb) - itinerary details
+- `createdAt` (timestamp)
+
+## Available Scripts
+
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run start` - Start production server
+- `npm run lint` - Run ESLint
+- `npm run format:check` - Check code formatting
+- `npm run format:write` - Fix code formatting
+- `npm run db:generate` - Generate database migrations
+- `npm run db:migrate` - Run database migrations
+- `npm run db:push` - Push schema changes to database
+- `npm run db:studio` - Open Drizzle Studio
+
+## Operations
+
+### Token Refresh
+Strava tokens expire every 6 hours. Run the refresh job:
+```bash
+npm run cron:start
+```
+
+## Contributing
+
+1. Create a feature branch
+2. Make your changes
+3. Run tests: `npm run check`
+4. Submit a pull request
+
+## Deployment
+
+Deploy to Vercel:
+1. Connect your GitHub repository
+2. Add environment variables
+3. Deploy
+
+---
+
+Built with the [T3 Stack](https://create.t3.gg/) 🚀

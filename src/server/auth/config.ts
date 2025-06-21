@@ -39,10 +39,10 @@ export const authConfig = {
   providers: [
     /**
      * Add authentication providers here when needed.
-     * 
+     *
      * For example, to add GitHub provider:
      * @see https://next-auth.js.org/providers/github
-     * 
+     *
      * For Discord provider:
      * @see https://next-auth.js.org/providers/discord
      */
