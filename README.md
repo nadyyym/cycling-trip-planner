@@ -103,6 +103,64 @@ NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN="your-mapbox-token"
 
 ## Features
 
+### Route Planning API
+The route planner takes a set of Strava segments and creates optimized multi-day cycling itineraries:
+
+- **Smart Segment Ordering**: Uses TSP algorithms to minimize transfer distances between segments
+- **Realistic Route Geometry**: Stitches together actual cycling routes using Mapbox Directions API
+- **Elevation-Aware Planning**: Incorporates real elevation data for accurate difficulty assessment
+- **Daily Constraints**: Ensures each day is 40-100km with ≤1000m elevation gain
+- **Multi-Day Optimization**: Distributes segments across up to 4 days for balanced trips
+
+**API Endpoint**: `POST /api/trpc/routePlanner.planTrip`
+
+**Request Schema**:
+```typescript
+{
+  segments: Array<{
+    segmentId: number;
+    forwardDirection: boolean;
+  }>;
+  maxDays: number; // 1-4
+  tripStart?: [longitude, latitude]; // Optional starting point
+}
+```
+
+**Success Response**:
+```typescript
+{
+  ok: true;
+  routes: Array<{
+    dayNumber: number;
+    distanceKm: number;
+    elevationGainM: number;
+    geometry: GeoJSON.LineString; // Full route geometry
+    segmentsVisited: number[];
+    durationMinutes: number;
+  }>;
+  totalDistanceKm: number;
+  totalElevationGainM: number;
+  totalDurationMinutes: number;
+}
+```
+
+**Error Response** (HTTP 200 with structured error):
+```typescript
+{
+  ok: false;
+  error: "dailyLimitExceeded" | "needMoreDays" | "segmentTooFar" | "externalApi";
+  details: string; // Human-readable error description
+}
+```
+
+**Error Types**:
+- `dailyLimitExceeded`: Single segment exceeds daily distance (100km) or elevation (1000m) limits
+- `needMoreDays`: Route cannot fit within maximum 4 days due to constraints
+- `segmentTooFar`: Segments too far apart, routing optimization failed, or too many waypoints (>25)
+- `externalApi`: Mapbox/Strava API errors, network issues, or invalid API responses
+
+**Note**: All route planning errors return HTTP 200 with structured error responses. Only authentication errors return HTTP error codes (401, etc.).
+
 ### Explore Segments
 The `/explore` page provides an interactive map-based segment exploration experience:
 
@@ -136,6 +194,23 @@ The `/explore` page provides an interactive map-based segment exploration experi
 - `npm run db:migrate` - Run database migrations
 - `npm run db:push` - Push schema changes to database
 - `npm run db:studio` - Open Drizzle Studio
+
+### Testing Route Planner
+
+Test the route planning functionality:
+```bash
+# Start the development server
+npm run dev
+
+# In another terminal, test the route planner
+./examples/test-route-planner-geometry.sh
+```
+
+The test script verifies:
+- Route planning with multiple segments
+- Geometry stitching (routes have >2 coordinates)
+- Elevation and distance calculations
+- Multi-day itinerary generation
 
 ## Operations
 
@@ -181,7 +256,67 @@ npm run cron:start
   - Frontend rate limit status indicators
   - Prevents duplicate API calls within cache TTL window
 
+### ✅ Route Planning Engine
+- **Commit 1-P**: Core types & tRPC skeleton ✅
+  - Defined `PlanRequest`, `DayRoute`, `PlanResponse` types with zod validation
+  - Created `routePlanner.planTrip` tRPC procedure with proper error handling
+  - Integrated with existing tRPC infrastructure
+
+- **Commit 2-P**: External API wrappers + in-process LRU cache ✅
+  - Mapbox Matrix API integration for cycling distances/durations
+  - Mapbox Directions API for route geometry between waypoints
+  - Mapbox elevation service integration (with heuristic fallback)
+  - LRU caching (1000 entries, 24h TTL) for all external API calls
+  - Enhanced Strava integration with `getSegmentMeta()` for route planning
+
+- **Commit 3-P**: Cost-matrix retrieval via Mapbox Matrix API ✅
+  - Efficient O×D distance matrix generation using cycling profile
+  - Support for up to 25 waypoints (Matrix API limit)
+  - Proper error handling and validation for matrix responses
+  - Waypoint management for trip start + segment start/end coordinates
+
+- **Commit 4-P**: TSP solver (ordering segments) ✅
+  - OR-Tools integration with fallback to brute-force and heuristic solvers
+  - Optimizes segment visiting order to minimize transfer distances
+  - Respects segment direction constraints (forward/reverse)
+  - Sub-500ms solving time for up to 10 segments
+  - Comprehensive logging and performance monitoring
+
+- **Commit 5-P**: Geometry stitching & elevation retrieval ✅
+  - **Advanced Route Geometry**: Creates continuous polylines by stitching:
+    - Transfer routes between segments (via Mapbox Directions API)
+    - Actual segment geometries with proper coordinate handling
+    - Smart coordinate deduplication to avoid geometry gaps
+  - **Accurate Elevation Data**: 
+    - Retrieves elevation profiles for all transfer routes
+    - Accumulates elevation gain across the entire route
+    - Provides cumulative distance and elevation arrays for partitioning
+  - **Real Road Following**: Routes follow actual cycling paths instead of straight lines
+  - **Geometry Extraction**: Extracts day-specific geometry from full route
+  - **Comprehensive Logging**: Detailed logging for debugging geometry issues
+  - **Graceful Fallbacks**: Falls back to matrix data when Directions API fails
+
+- **Commit 6-P**: Daily partitioning algorithm ✅
+  - Dynamic programming approach for optimal day partitioning
+  - Enforces constraints: 40-100km distance, ≤1000m elevation per day
+  - Maximum 4 days per trip with balanced distribution
+  - Uses accurate geometry-stitched distance and elevation data
+  - Detailed constraint violation reporting and error handling
+
+- **Commit 7-P**: Error mapping & response formatter ✅
+  - **Structured Error Responses**: All errors return HTTP 200 with `{ ok: false, error, details }` format
+  - **Custom Error Classes**: `DailyLimitExceededError`, `NeedMoreDaysError`, `SegmentTooFarError`, `ExternalApiPlannerError`
+  - **Centralized Error Mapping**: Single `mapErrorToResponse()` function handles all error types
+  - **Machine-Readable Error Codes**: `dailyLimitExceeded`, `needMoreDays`, `segmentTooFar`, `externalApi`
+  - **Detailed Error Messages**: Human-readable descriptions for debugging and user feedback
+  - **Authentication Exception**: Only auth errors still throw HTTP error codes (401, etc.)
+  - **Comprehensive Error Handling**: Maps TSP, external API, and constraint violation errors
+
 ### 🚧 Upcoming Features
+- **Commit 8-P**: Unit & E2E test suite + CI job
+- **Commit 9-P**: Docs & example script
+
+### 🚧 Frontend Integration
 - **Commit 8-R**: QA, Analytics & Docs
 
 ## Contributing

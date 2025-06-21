@@ -6,11 +6,167 @@ import {
   getMatrix,
   type Coordinate,
   type CostMatrix,
+  ExternalApiError,
 } from "~/server/integrations/mapbox";
 import { accounts } from "~/server/db/schema";
 import { eq } from "drizzle-orm";
 import { solveOrderedSegments, TSPSolverError } from "~/server/algorithms/tsp";
 import { partitionRoute } from "~/server/algorithms/dailyPartitioner";
+import {
+  stitchRouteGeometry,
+  extractDayGeometry,
+  type StitchedGeometry,
+} from "~/server/algorithms/geometryStitcher";
+
+/**
+ * Custom error classes for route planning failures
+ * These map to the PlannerError union type in the response schema
+ */
+export class DailyLimitExceededError extends Error {
+  public readonly plannerErrorType = "dailyLimitExceeded" as const;
+
+  constructor(details: string) {
+    super(`Daily limit exceeded: ${details}`);
+    this.name = "DailyLimitExceededError";
+  }
+}
+
+export class NeedMoreDaysError extends Error {
+  public readonly plannerErrorType = "needMoreDays" as const;
+
+  constructor(details: string) {
+    super(`Need more days: ${details}`);
+    this.name = "NeedMoreDaysError";
+  }
+}
+
+export class SegmentTooFarError extends Error {
+  public readonly plannerErrorType = "segmentTooFar" as const;
+
+  constructor(details: string) {
+    super(`Segment too far: ${details}`);
+    this.name = "SegmentTooFarError";
+  }
+}
+
+export class ExternalApiPlannerError extends Error {
+  public readonly plannerErrorType = "externalApi" as const;
+
+  constructor(details: string) {
+    super(`External API error: ${details}`);
+    this.name = "ExternalApiPlannerError";
+  }
+}
+
+/**
+ * Maps various error types to structured PlanResponse failure format
+ * This function centralizes error handling and ensures consistent error responses
+ *
+ * @param error The error to map
+ * @param context Additional context for logging
+ * @returns Structured failure response with error type and details
+ */
+function mapErrorToResponse(error: unknown, context: string): PlanResponse {
+  console.error(`[ROUTE_PLANNER_ERROR_MAPPING]`, {
+    context,
+    errorType: error instanceof Error ? error.constructor.name : typeof error,
+    errorMessage: error instanceof Error ? error.message : String(error),
+    timestamp: new Date().toISOString(),
+  });
+
+  // Handle custom planner errors
+  if (
+    error instanceof DailyLimitExceededError ||
+    error instanceof NeedMoreDaysError ||
+    error instanceof SegmentTooFarError ||
+    error instanceof ExternalApiPlannerError
+  ) {
+    return {
+      ok: false,
+      error: error.plannerErrorType,
+      details: error.message,
+    };
+  }
+
+  // Handle TSP solver errors
+  if (error instanceof TSPSolverError) {
+    return {
+      ok: false,
+      error: "segmentTooFar",
+      details: `Route optimization failed: ${error.message}`,
+    };
+  }
+
+  // Handle external API errors (Mapbox, Strava, etc.)
+  if (error instanceof ExternalApiError) {
+    return {
+      ok: false,
+      error: "externalApi",
+      details: `${error.service} API error (${error.status}): ${error.message}`,
+    };
+  }
+
+  // Handle network/fetch errors that might indicate external API issues
+  if (
+    error instanceof Error &&
+    (error.message.includes("fetch") ||
+      error.message.includes("network") ||
+      error.message.includes("timeout"))
+  ) {
+    return {
+      ok: false,
+      error: "externalApi",
+      details: `Network error during external API call: ${error.message}`,
+    };
+  }
+
+  // Handle authorization/authentication errors - these should still throw
+  if (error instanceof TRPCError && error.code === "UNAUTHORIZED") {
+    throw error;
+  }
+
+  // Handle any error that mentions specific constraint violations
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+
+    if (
+      message.includes("daily") &&
+      (message.includes("limit") || message.includes("exceed"))
+    ) {
+      return {
+        ok: false,
+        error: "dailyLimitExceeded",
+        details: error.message,
+      };
+    }
+
+    if (message.includes("need more days") || message.includes("max days")) {
+      return {
+        ok: false,
+        error: "needMoreDays",
+        details: error.message,
+      };
+    }
+
+    if (message.includes("too far") || message.includes("distance")) {
+      return {
+        ok: false,
+        error: "segmentTooFar",
+        details: error.message,
+      };
+    }
+  }
+
+  // For any other error, return a generic segmentTooFar error
+  // This maintains backwards compatibility while providing error details
+  const errorMessage =
+    error instanceof Error ? error.message : "Unknown error occurred";
+  return {
+    ok: false,
+    error: "segmentTooFar",
+    details: `Route planning failed: ${errorMessage}`,
+  };
+}
 
 /**
  * Route planner tRPC router
@@ -22,6 +178,9 @@ export const routePlannerRouter = createTRPCRouter({
    * This procedure takes a list of segments and constraints,
    * then returns optimized daily routes or error details
    * Requires user to be authenticated with Strava to access segment data
+   *
+   * All errors are mapped to structured responses with HTTP 200 status
+   * Only authentication errors result in HTTP error responses
    */
   planTrip: protectedProcedure
     .input(PlanRequestSchema)
@@ -221,18 +380,15 @@ export const routePlannerRouter = createTRPCRouter({
 
         // Validate matrix size constraints
         if (waypoints.length > 25) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: `Too many waypoints (${waypoints.length}). Maximum is 25 for Matrix API. Consider reducing segments or removing trip start.`,
-          });
+          throw new SegmentTooFarError(
+            `Too many waypoints (${waypoints.length}). Maximum is 25 for Matrix API. Consider reducing segments or removing trip start.`,
+          );
         }
 
         if (waypoints.length === 0) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message:
-              "No waypoints generated. At least one segment is required.",
-          });
+          throw new SegmentTooFarError(
+            "No waypoints generated. At least one segment is required.",
+          );
         }
 
         // Get cost matrix from Mapbox
@@ -248,20 +404,18 @@ export const routePlannerRouter = createTRPCRouter({
 
         // Validate matrix response
         if (!matrix.distances || !matrix.durations) {
-          throw new TRPCError({
-            code: "BAD_GATEWAY",
-            message: "Invalid matrix response from Mapbox API",
-          });
+          throw new ExternalApiPlannerError(
+            "Invalid matrix response from Mapbox API - missing distance or duration data",
+          );
         }
 
         if (
           matrix.distances.length !== waypoints.length ||
           matrix.durations.length !== waypoints.length
         ) {
-          throw new TRPCError({
-            code: "BAD_GATEWAY",
-            message: `Matrix size mismatch. Expected ${waypoints.length}x${waypoints.length}, got ${matrix.distances.length}x${matrix.distances[0]?.length ?? 0}`,
-          });
+          throw new ExternalApiPlannerError(
+            `Matrix size mismatch. Expected ${waypoints.length}x${waypoints.length}, got ${matrix.distances.length}x${matrix.distances[0]?.length ?? 0}`,
+          );
         }
 
         // Validate all values are finite numbers
@@ -273,10 +427,9 @@ export const routePlannerRouter = createTRPCRouter({
         );
 
         if (hasInvalidDistances || hasInvalidDurations) {
-          throw new TRPCError({
-            code: "BAD_GATEWAY",
-            message: "Matrix contains invalid distance or duration values",
-          });
+          throw new ExternalApiPlannerError(
+            "Matrix contains invalid distance or duration values",
+          );
         }
 
         console.log(`[ROUTE_PLANNER_STEP2_COMPLETE]`, {
@@ -343,8 +496,57 @@ export const routePlannerRouter = createTRPCRouter({
             timestamp: new Date().toISOString(),
           });
 
-          // Step 4-6: Daily partitioning (Commit #6)
-          // Note: Geometry stitching (Commit #5) will be added later to enhance this step
+          // Step 5: Geometry stitching & elevation retrieval (Commit #5)
+          const step5Start = Date.now();
+          console.log(
+            `[ROUTE_PLANNER_STEP5_START] Stitching route geometry and retrieving elevation data`,
+          );
+
+          let stitchedGeometry: StitchedGeometry;
+          let step5Duration: number;
+          try {
+            stitchedGeometry = await stitchRouteGeometry(
+              tspSolution,
+              segmentMetas,
+              matrix,
+              tripStartIndex,
+            );
+
+            step5Duration = Date.now() - step5Start;
+
+            console.log(`[ROUTE_PLANNER_STEP5_COMPLETE]`, {
+              duration: `${step5Duration}ms`,
+              totalDistance: stitchedGeometry.totalDistance,
+              totalElevationGain: stitchedGeometry.totalElevationGain,
+              coordinateCount: stitchedGeometry.geometry.coordinates.length,
+              cumulativePoints: stitchedGeometry.cumulativeDistances.length,
+              avgDistancePerSegment: Math.round(
+                stitchedGeometry.totalDistance /
+                  tspSolution.orderedSegments.length,
+              ),
+              avgElevationPerSegment: Math.round(
+                stitchedGeometry.totalElevationGain /
+                  tspSolution.orderedSegments.length,
+              ),
+              timestamp: new Date().toISOString(),
+            });
+          } catch (stitchError) {
+            step5Duration = Date.now() - step5Start;
+
+            console.error(`[ROUTE_PLANNER_STEP5_ERROR]`, {
+              duration: `${step5Duration}ms`,
+              error:
+                stitchError instanceof Error
+                  ? stitchError.message
+                  : "Unknown error",
+              timestamp: new Date().toISOString(),
+            });
+
+            // Re-throw the original error to be handled by the outer error mapping
+            throw stitchError;
+          }
+
+          // Step 6: Daily partitioning (Commit #6)
           const step6Start = Date.now();
           console.log(
             `[ROUTE_PLANNER_STEP6_START] Partitioning route into daily segments`,
@@ -368,10 +570,27 @@ export const routePlannerRouter = createTRPCRouter({
                 timestamp: new Date().toISOString(),
               });
 
-              throw new TRPCError({
-                code: "BAD_REQUEST",
-                message: `Route partitioning failed: ${partitionResult.errorDetails}`,
-              });
+              // Map partition error codes to our custom error classes
+              if (partitionResult.errorCode === "dailyLimitExceeded") {
+                throw new DailyLimitExceededError(
+                  partitionResult.errorDetails ??
+                    "Daily constraints cannot be met",
+                );
+              } else if (partitionResult.errorCode === "needMoreDays") {
+                throw new NeedMoreDaysError(
+                  partitionResult.errorDetails ??
+                    "Route requires more than maximum allowed days",
+                );
+              } else if (partitionResult.errorCode === "segmentTooFar") {
+                throw new SegmentTooFarError(
+                  partitionResult.errorDetails ??
+                    "Segments are too far apart to route efficiently",
+                );
+              } else {
+                throw new DailyLimitExceededError(
+                  partitionResult.errorDetails ?? "Route partitioning failed",
+                );
+              }
             }
 
             console.log(`[ROUTE_PLANNER_STEP6_COMPLETE]`, {
@@ -387,42 +606,33 @@ export const routePlannerRouter = createTRPCRouter({
               timestamp: new Date().toISOString(),
             });
 
-            // Build DayRoute objects for the response
-            // Note: This is a simplified geometry - will be enhanced in Commit #5
+            // Build DayRoute objects for the response using stitched geometry
             const routes = partitionResult.partitions!.map((partition) => {
               const segmentsVisited = partition.segmentIndices.map(
                 (segmentIndex) =>
                   tspSolution.orderedSegments[segmentIndex]!.segmentId,
               );
 
-              // Create simplified geometry - a straight line between first and last segment
-              // This will be replaced with proper geometry stitching in Commit #5
-              const firstSegmentIndex = partition.segmentIndices[0]!;
-              const lastSegmentIndex =
-                partition.segmentIndices[partition.segmentIndices.length - 1]!;
-              const firstSegment =
-                tspSolution.orderedSegments[firstSegmentIndex]!;
-              const lastSegment =
-                tspSolution.orderedSegments[lastSegmentIndex]!;
+              // Extract day-specific geometry from the stitched route
+              const dayGeometry = extractDayGeometry(
+                stitchedGeometry,
+                partition.segmentIndices,
+              );
 
-              const firstSegmentMeta = segmentMetas.find(
-                (meta) => meta.id === firstSegment.segmentId.toString(),
-              )!;
-              const lastSegmentMeta = segmentMetas.find(
-                (meta) => meta.id === lastSegment.segmentId.toString(),
-              )!;
-
-              const startCoord = firstSegmentMeta.startCoord;
-              const endCoord = lastSegmentMeta.endCoord;
+              console.log(`[ROUTE_PLANNER_DAY_GEOMETRY]`, {
+                dayNumber: partition.dayNumber,
+                segmentIndices: partition.segmentIndices,
+                segmentCount: partition.segmentIndices.length,
+                coordinateCount: dayGeometry.coordinates.length,
+                distanceKm: partition.distanceKm,
+                elevationGainM: partition.elevationGainM,
+              });
 
               return {
                 dayNumber: partition.dayNumber,
                 distanceKm: partition.distanceKm,
                 elevationGainM: partition.elevationGainM,
-                geometry: {
-                  type: "LineString" as const,
-                  coordinates: [startCoord, endCoord],
-                },
+                geometry: dayGeometry,
                 segmentsVisited,
                 durationMinutes: partition.durationMinutes,
               };
@@ -454,7 +664,10 @@ export const routePlannerRouter = createTRPCRouter({
                 Math.round((totalDurationMinutes / 60) * 10) / 10,
               tspMethod: tspSolution.method,
               tspSolvingTimeMs: tspSolution.solvingTimeMs,
+              geometryStitchingTimeMs: step5Duration,
               partitioningTimeMs: step6Duration,
+              stitchedCoordinates: stitchedGeometry.geometry.coordinates.length,
+              hasStitchedGeometry: true,
               timestamp: new Date().toISOString(),
             });
 
@@ -478,16 +691,8 @@ export const routePlannerRouter = createTRPCRouter({
               timestamp: new Date().toISOString(),
             });
 
-            // If it's already a TRPCError, re-throw it
-            if (partitionError instanceof TRPCError) {
-              throw partitionError;
-            }
-
-            // Otherwise, wrap it in a generic error
-            throw new TRPCError({
-              code: "INTERNAL_SERVER_ERROR",
-              message: "Failed to partition route into daily segments",
-            });
+            // Re-throw the original error to be handled by outer error mapping
+            throw partitionError;
           }
         } catch (error) {
           const step3Duration = Date.now() - step3Start;
@@ -500,24 +705,15 @@ export const routePlannerRouter = createTRPCRouter({
             timestamp: new Date().toISOString(),
           });
 
-          if (error instanceof TSPSolverError) {
-            throw new TRPCError({
-              code: "BAD_REQUEST",
-              message: `TSP solving failed: ${error.message}`,
-            });
-          }
-
-          throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
-            message: "Failed to solve TSP for route optimization",
-          });
+          // Re-throw the original error to be handled by outer error mapping
+          throw error;
         }
       } catch (error) {
         const totalDuration = Date.now() - planStart;
 
-        // Handle different error types appropriately
-        if (error instanceof TRPCError) {
-          console.error(`[ROUTE_PLANNER_TRPC_ERROR]`, {
+        // Handle authentication errors - these should still throw as tRPC errors
+        if (error instanceof TRPCError && error.code === "UNAUTHORIZED") {
+          console.error(`[ROUTE_PLANNER_AUTH_ERROR]`, {
             code: error.code,
             message: error.message,
             duration: `${totalDuration}ms`,
@@ -530,29 +726,14 @@ export const routePlannerRouter = createTRPCRouter({
           error: error instanceof Error ? error.message : "Unknown error",
           duration: `${totalDuration}ms`,
           stack: error instanceof Error ? error.stack : undefined,
+          errorType:
+            error instanceof Error ? error.constructor.name : typeof error,
           timestamp: new Date().toISOString(),
         });
 
-        // Map external API errors to appropriate tRPC errors
-        if (error instanceof Error && error.message.includes("Mapbox")) {
-          throw new TRPCError({
-            code: "BAD_GATEWAY",
-            message: `External API error: ${error.message}`,
-          });
-        }
-
-        if (error instanceof Error && error.message.includes("Strava")) {
-          throw new TRPCError({
-            code: "BAD_GATEWAY",
-            message: `External API error: ${error.message}`,
-          });
-        }
-
-        // Generic internal server error for unexpected errors
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Route planning failed due to internal error",
-        });
+        // Use the error mapping function to convert all other errors
+        // to structured PlanResponse failures with HTTP 200 status
+        return mapErrorToResponse(error, "Route planning main procedure");
       }
     }),
 });
