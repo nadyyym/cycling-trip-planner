@@ -16,6 +16,14 @@ import {
   reverseGeocode,
   type LocationInfo,
 } from "~/server/integrations/mapbox";
+import { MapPin } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "~/components/ui/dialog";
 
 // Mapbox access token
 mapboxgl.accessToken = env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
@@ -44,6 +52,9 @@ export default function ExplorePage() {
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const [currentLocationInfo, setCurrentLocationInfo] =
     useState<LocationInfo | null>(null);
+
+  // Dialog state for location change
+  const [isLocationDialogOpen, setIsLocationDialogOpen] = useState(false);
 
   // Search state
   const [searchValue, setSearchValue] = useState("");
@@ -518,54 +529,29 @@ export default function ExplorePage() {
         <div className="flex w-80 flex-col overflow-hidden border-r bg-white">
           {/* Search section */}
           <div className="flex-shrink-0 border-b p-4">
-            <div className="space-y-4">
-              {/* Location controls */}
-              <div className="rounded-lg bg-green-50 p-4">
-                <h3 className="mb-2 text-sm font-medium text-green-900">
-                  {locationPermission === "granted" &&
-                  !currentLocationInfo &&
-                  isLoadingLocation
-                    ? "📍 Getting your location..."
-                    : (currentLocationInfo?.displayName ??
-                      "📍 Current location: Girona, Spain")}
-                </h3>
-                <button
-                  onClick={handleUseMyLocation}
-                  disabled={isLoadingLocation}
-                  className="w-full rounded-md bg-green-600 px-3 py-2 text-sm text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {isLoadingLocation
-                    ? "Getting your location..."
-                    : locationPermission === "denied"
-                      ? "Location access denied"
-                      : "📍 Use my location"}
-                </button>
-                {locationPermission === "denied" && (
-                  <p className="mt-2 text-xs text-green-700">
-                    Enable location permissions to use your current location
-                  </p>
-                )}
-              </div>
-
-              {/* Search */}
-              <div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={searchValue}
-                    onChange={(e) => setSearchValue(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    placeholder="Enter city or location..."
-                    className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                  <button
-                    onClick={() => void handleSearch()}
-                    className="rounded-md bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                  >
-                    Search
-                  </button>
-                </div>
-              </div>
+            {/* ==== MINIMAL LOCATION UI (Step 7) ====  */}
+            {/* Removed bulky location section to save 56px+ vertical space */}
+            {/* Location functionality moved to minimal map button */}
+            {/* ===================================== */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={searchValue}
+                onChange={(e) => setSearchValue(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder={
+                  locationPermission === "granted"
+                    ? "Enter city or location..."
+                    : "Enter city or use your current location..."
+                }
+                className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+              <button
+                onClick={() => void handleSearch()}
+                className="rounded-md bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              >
+                Search
+              </button>
             </div>
           </div>
 
@@ -619,6 +605,89 @@ export default function ExplorePage() {
                   </div>
                 </div>
               </div>
+
+              {/* ==== MINIMAL LOCATION BUTTON (Step 7) ====  */}
+              {/* Compact map button to replace bulky sidebar section */}
+              {/* ============================================== */}
+              <Dialog
+                open={isLocationDialogOpen}
+                onOpenChange={setIsLocationDialogOpen}
+              >
+                <DialogTrigger asChild>
+                  <button
+                    className="absolute right-4 top-4 rounded-lg bg-white p-3 shadow-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                    aria-label="Change location"
+                    title="Change area"
+                  >
+                    <MapPin className="h-5 w-5 text-gray-700" />
+                  </button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Change Location</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    {/* Current location button */}
+                    <button
+                      onClick={() => {
+                        handleUseMyLocation();
+                        setIsLocationDialogOpen(false);
+                      }}
+                      disabled={isLoadingLocation}
+                      className="w-full rounded-md bg-green-600 px-4 py-3 text-sm text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isLoadingLocation
+                        ? "Getting your location..."
+                        : locationPermission === "denied"
+                          ? "Location access denied"
+                          : "📍 Use my current location"}
+                    </button>
+
+                    {locationPermission === "denied" && (
+                      <p className="text-xs text-gray-600">
+                        Enable location permissions in your browser settings to
+                        use your current location
+                      </p>
+                    )}
+
+                    {/* Divider */}
+                    <div className="relative">
+                      <div className="absolute inset-0 flex items-center">
+                        <span className="w-full border-t" />
+                      </div>
+                      <div className="relative flex justify-center text-xs uppercase">
+                        <span className="bg-white px-2 text-gray-500">or</span>
+                      </div>
+                    </div>
+
+                    {/* Search form */}
+                    <div className="space-y-2">
+                      <input
+                        type="text"
+                        value={searchValue}
+                        onChange={(e) => setSearchValue(e.target.value)}
+                        onKeyPress={(e) => {
+                          if (e.key === "Enter") {
+                            void handleSearch();
+                            setIsLocationDialogOpen(false);
+                          }
+                        }}
+                        placeholder="Enter city name..."
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                      <button
+                        onClick={() => {
+                          void handleSearch();
+                          setIsLocationDialogOpen(false);
+                        }}
+                        className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                      >
+                        Search Location
+                      </button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
 
               {/* Map tooltip - appears when hovering over segments */}
               {mapTooltip.visible && mapTooltip.segment && (

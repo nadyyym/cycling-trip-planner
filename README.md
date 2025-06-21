@@ -246,6 +246,12 @@ The `/explore` page provides an interactive map-based segment exploration experi
   - 1-hour caching to minimize API calls and improve performance
   - Graceful fallbacks to generic "Your Location" if geocoding fails
   - Real-time location updates when user grants location permissions
+- **Minimal Location Controls**: Clean, space-efficient location UI
+  - Compact map button (📍) replaces bulky sidebar section
+  - Saves 56+ pixels of vertical space on mobile devices
+  - Accessible with ARIA labels and keyboard navigation
+  - Modal dialog with current location and search options
+  - Smart search placeholder suggests using current location when not granted
 - **Segment Visualization**: 
   - Green lines (color: `#10b981`) show discovered segments
   - Red highlighting (color: `#ef4444`) on hover
