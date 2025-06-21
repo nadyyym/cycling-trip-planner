@@ -62,6 +62,7 @@ export const users = createTable("user", (d) => ({
 export const usersRelations = relations(users, ({ many }) => ({
   accounts: many(accounts),
   itineraries: many(itineraries),
+  favourites: many(favourites),
 }));
 
 export const accounts = createTable(
@@ -175,4 +176,41 @@ export const itineraries = createTable(
 
 export const itinerariesRelations = relations(itineraries, ({ one }) => ({
   user: one(users, { fields: [itineraries.userId], references: [users.id] }),
+}));
+
+// Favourites table for user's favourite Strava segments
+export const favourites = createTable(
+  "favourite",
+  (d) => ({
+    userId: d
+      .varchar({ length: 255 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    segmentId: d
+      .bigint({ mode: "bigint" })
+      .notNull()
+      .references(() => segments.id, { onDelete: "cascade" }),
+    createdAt: d
+      .timestamp({ withTimezone: true })
+      .default(sql`CURRENT_TIMESTAMP`)
+      .notNull(),
+  }),
+  (t) => [
+    primaryKey({ columns: [t.userId, t.segmentId] }),
+    index("favourite_user_idx").on(t.userId),
+    index("favourite_segment_idx").on(t.segmentId),
+  ],
+);
+
+export const favouritesRelations = relations(favourites, ({ one }) => ({
+  user: one(users, { fields: [favourites.userId], references: [users.id] }),
+  segment: one(segments, {
+    fields: [favourites.segmentId],
+    references: [segments.id],
+  }),
+}));
+
+// Add segments relations to include favourites
+export const segmentsRelations = relations(segments, ({ many }) => ({
+  favourites: many(favourites),
 }));
