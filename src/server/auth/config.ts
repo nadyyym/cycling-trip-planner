@@ -57,6 +57,8 @@ declare module "next-auth/jwt" {
  * @see https://next-auth.js.org/configuration/options
  */
 export const authConfig = {
+  secret: env.AUTH_SECRET,
+  trustHost: true,
   providers: [
     StravaProvider({
       clientId: env.STRAVA_CLIENT_ID,

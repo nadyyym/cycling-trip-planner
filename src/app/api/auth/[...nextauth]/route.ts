@@ -1,12 +1,4 @@
-import NextAuth from "next-auth";
+import { handlers } from "~/server/auth";
 
-import { authConfig } from "~/server/auth/config";
-import { env } from "~/env";
-
-const handler = NextAuth({
-  ...authConfig,
-  secret: env.AUTH_SECRET,
-  trustHost: true,
-});
-
-export { handler as GET, handler as POST };
+// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+export const { GET, POST } = handlers;
