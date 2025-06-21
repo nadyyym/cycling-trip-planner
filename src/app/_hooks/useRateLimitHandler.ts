@@ -72,7 +72,10 @@ export function useRateLimitHandler() {
     }
 
     const now = Date.now();
-    return Math.max(0, Math.ceil((rateLimitState.rateLimitEndsAt - now) / 1000));
+    return Math.max(
+      0,
+      Math.ceil((rateLimitState.rateLimitEndsAt - now) / 1000),
+    );
   }, [rateLimitState]);
 
   /**
@@ -98,7 +101,7 @@ export function useRateLimitHandler() {
 
     const timer = setTimeout(() => {
       setRateLimitState({ isRateLimited: false });
-      
+
       // Show success toast when rate limit expires
       toast({
         title: "✅ Rate Limit Cleared",
@@ -117,4 +120,4 @@ export function useRateLimitHandler() {
     handleRateLimit,
     clearRateLimit,
   };
-} 
+}

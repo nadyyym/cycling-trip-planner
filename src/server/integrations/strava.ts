@@ -177,7 +177,10 @@ export class StravaClient {
         console.log(`[STRAVA_TOKEN_REFRESH_SUCCESS]`, {
           duration: `${refreshDuration}ms`,
           newExpiresAt: data.expires_at,
-          newExpiresIn: Math.max(0, data.expires_at - Math.floor(Date.now() / 1000)),
+          newExpiresIn: Math.max(
+            0,
+            data.expires_at - Math.floor(Date.now() / 1000),
+          ),
           timestamp: new Date().toISOString(),
         });
 
@@ -199,12 +202,12 @@ export class StravaClient {
       } catch (error) {
         const refreshDuration = Date.now() - refreshStart;
         console.error(`[STRAVA_TOKEN_REFRESH_FAILED]`, {
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: error instanceof Error ? error.message : "Unknown error",
           duration: `${refreshDuration}ms`,
           stack: error instanceof Error ? error.stack : undefined,
           timestamp: new Date().toISOString(),
         });
-        
+
         throw new TRPCError({
           code: "UNAUTHORIZED",
           message: "Failed to refresh Strava token",
@@ -282,7 +285,7 @@ export class StravaClient {
       return response.json() as T;
     } catch (error) {
       const duration = Date.now() - requestStart;
-      
+
       // If it's already a TRPCError, just log and re-throw
       if (error instanceof TRPCError) {
         throw error;
@@ -291,7 +294,7 @@ export class StravaClient {
       console.error(`[STRAVA_API_REQUEST_ERROR]`, {
         requestId,
         endpoint,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
         duration: `${duration}ms`,
         stack: error instanceof Error ? error.stack : undefined,
         timestamp: new Date().toISOString(),
@@ -377,16 +380,16 @@ export class StravaClient {
         } catch (error) {
           failureCount++;
           const segmentDetailDuration = Date.now() - segmentDetailStart;
-          
+
           console.warn(`[STRAVA_SEGMENT_DETAIL_FALLBACK]`, {
             segmentId: segment.id,
             segmentName: segment.name,
-            error: error instanceof Error ? error.message : 'Unknown error',
+            error: error instanceof Error ? error.message : "Unknown error",
             duration: `${segmentDetailDuration}ms`,
             message: "Using basic segment data without polyline",
             timestamp: new Date().toISOString(),
           });
-          
+
           // Fall back to basic segment without polyline
           segments.push({
             id: segment.id.toString(),
@@ -408,7 +411,10 @@ export class StravaClient {
       }
 
       const exploreDuration = Date.now() - exploreStart;
-      const polylineSuccessRate = data.segments.length > 0 ? (successCount / data.segments.length * 100).toFixed(1) : 0;
+      const polylineSuccessRate =
+        data.segments.length > 0
+          ? ((successCount / data.segments.length) * 100).toFixed(1)
+          : 0;
 
       console.log(`[STRAVA_EXPLORE_SEGMENTS_COMPLETE]`, {
         bounds: boundsStr,
@@ -424,15 +430,15 @@ export class StravaClient {
       return segments;
     } catch (error) {
       const exploreDuration = Date.now() - exploreStart;
-      
+
       console.error(`[STRAVA_EXPLORE_SEGMENTS_ERROR]`, {
         bounds: boundsStr,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
         duration: `${exploreDuration}ms`,
         stack: error instanceof Error ? error.stack : undefined,
         timestamp: new Date().toISOString(),
       });
-      
+
       throw error;
     }
   }
@@ -442,7 +448,7 @@ export class StravaClient {
    */
   async getSegmentDetail(segmentId: string): Promise<SegmentDetailDTO> {
     const detailStart = Date.now();
-    
+
     console.log(`[STRAVA_GET_SEGMENT_DETAIL_START]`, {
       segmentId,
       timestamp: new Date().toISOString(),
@@ -486,15 +492,15 @@ export class StravaClient {
       return result;
     } catch (error) {
       const detailDuration = Date.now() - detailStart;
-      
+
       console.error(`[STRAVA_GET_SEGMENT_DETAIL_ERROR]`, {
         segmentId,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
         duration: `${detailDuration}ms`,
         stack: error instanceof Error ? error.stack : undefined,
         timestamp: new Date().toISOString(),
       });
-      
+
       throw error;
     }
   }
@@ -502,13 +508,13 @@ export class StravaClient {
   /**
    * Get simplified segment metadata optimized for route planning
    * Returns only the essential data needed for TSP algorithms and constraint checking
-   * 
+   *
    * @param segmentId Strava segment ID
    * @returns Essential segment metadata for route planning
    */
   async getSegmentMeta(segmentId: string): Promise<SegmentMeta> {
     const metaStart = Date.now();
-    
+
     console.log(`[STRAVA_GET_SEGMENT_META_START]`, {
       segmentId,
       timestamp: new Date().toISOString(),
@@ -544,15 +550,15 @@ export class StravaClient {
       return result;
     } catch (error) {
       const metaDuration = Date.now() - metaStart;
-      
+
       console.error(`[STRAVA_GET_SEGMENT_META_ERROR]`, {
         segmentId,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
         duration: `${metaDuration}ms`,
         stack: error instanceof Error ? error.stack : undefined,
         timestamp: new Date().toISOString(),
       });
-      
+
       throw error;
     }
   }

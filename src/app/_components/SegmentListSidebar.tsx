@@ -35,24 +35,28 @@ export default function SegmentListSidebar({
 
   // Get saved status for current segments
   const { data: savedSegmentIds = [] } = api.segment.getSavedStatus.useQuery(
-    { segmentIds: segments.map(s => s.id) },
-    { enabled: segments.length > 0 }
+    { segmentIds: segments.map((s) => s.id) },
+    { enabled: segments.length > 0 },
   );
 
   // Save segments mutation
   const saveSegmentsMutation = api.segment.saveMany.useMutation({
     onSuccess: (result) => {
       // Show success toast
-      console.log(`Successfully saved ${result.saved} segments, skipped ${result.skipped} existing`);
-      
+      console.log(
+        `Successfully saved ${result.saved} segments, skipped ${result.skipped} existing`,
+      );
+
       // Clear selection after successful save
       clearSelection();
-      
+
       // Simple alert for now (can be replaced with proper toast later)
-      alert(`✅ Saved ${result.saved} segment${result.saved === 1 ? '' : 's'}${result.skipped > 0 ? `, ${result.skipped} already existed` : ''}`);
+      alert(
+        `✅ Saved ${result.saved} segment${result.saved === 1 ? "" : "s"}${result.skipped > 0 ? `, ${result.skipped} already existed` : ""}`,
+      );
     },
     onError: (error) => {
-      console.error('Failed to save segments:', error);
+      console.error("Failed to save segments:", error);
       alert(`❌ Failed to save segments: ${error.message}`);
     },
   });
@@ -85,15 +89,17 @@ export default function SegmentListSidebar({
   };
 
   const handleSaveSelected = () => {
-    const selectedSegments = segments.filter(s => selectedSegmentIds.has(s.id));
-    
+    const selectedSegments = segments.filter((s) =>
+      selectedSegmentIds.has(s.id),
+    );
+
     if (selectedSegments.length === 0) {
-      alert('Please select segments to save');
+      alert("Please select segments to save");
       return;
     }
 
     // Convert SegmentDTO to the format expected by the API
-    const segmentsToSave = selectedSegments.map(segment => ({
+    const segmentsToSave = selectedSegments.map((segment) => ({
       id: segment.id,
       name: segment.name,
       distance: segment.distance,
@@ -147,10 +153,12 @@ export default function SegmentListSidebar({
                   <button
                     onClick={handleSaveSelected}
                     disabled={saveSegmentsMutation.isPending}
-                    className="rounded-md bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="rounded-md bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                     title="Save selected segments to your collection"
                   >
-                    {saveSegmentsMutation.isPending ? 'Saving...' : 'Save Selected'}
+                    {saveSegmentsMutation.isPending
+                      ? "Saving..."
+                      : "Save Selected"}
                   </button>
                 </div>
               </div>
@@ -175,7 +183,8 @@ export default function SegmentListSidebar({
               <div className="text-sm text-yellow-800">
                 <p className="font-medium">⏳ Strava Rate Limited</p>
                 <p className="mt-1">
-                  Too many requests. Please wait a moment before exploring new areas.
+                  Too many requests. Please wait a moment before exploring new
+                  areas.
                 </p>
               </div>
             </div>
@@ -265,8 +274,8 @@ export default function SegmentListSidebar({
                             {segment.name}
                           </h4>
                           {isSaved && (
-                            <span 
-                              className="flex-shrink-0 text-green-600 text-xs font-medium"
+                            <span
+                              className="flex-shrink-0 text-xs font-medium text-green-600"
                               title="Segment already saved"
                             >
                               •

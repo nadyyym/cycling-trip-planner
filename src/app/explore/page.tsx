@@ -63,7 +63,9 @@ export default function ExplorePage() {
   segmentsRef.current = segments;
 
   const zoomToSegment = useCallback((segmentId: string) => {
-    const segment = segmentsRef.current.find((s: { id: string }) => s.id === segmentId);
+    const segment = segmentsRef.current.find(
+      (s: { id: string }) => s.id === segmentId,
+    );
     if (!segment || !map.current) return;
 
     const bounds = getSegmentBounds(segment);

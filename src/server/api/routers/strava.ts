@@ -2,7 +2,11 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
-import { StravaClient, type BoundsInput, type SegmentDTO } from "~/server/integrations/strava";
+import {
+  StravaClient,
+  type BoundsInput,
+  type SegmentDTO,
+} from "~/server/integrations/strava";
 import { accounts } from "~/server/db/schema";
 import { eq } from "drizzle-orm";
 import { segmentExploreCache, LRUCache } from "~/server/cache/lru";
@@ -78,7 +82,9 @@ export const stravaRouter = createTRPCRouter({
           userId,
           duration: `${dbDuration}ms`,
           hasAccount: !!stravaAccount,
-          hasTokens: !!(stravaAccount?.access_token && stravaAccount?.refresh_token),
+          hasTokens: !!(
+            stravaAccount?.access_token && stravaAccount?.refresh_token
+          ),
           timestamp: new Date().toISOString(),
         });
 
@@ -156,13 +162,13 @@ export const stravaRouter = createTRPCRouter({
         return segments;
       } catch (error) {
         const duration = Date.now() - startTime;
-        
+
         console.error(`[STRAVA_SEGMENT_EXPLORE_ERROR]`, {
           userId,
           cacheKey,
           duration: `${duration}ms`,
-          error: error instanceof Error ? error.message : 'Unknown error',
-          errorType: error instanceof TRPCError ? error.code : 'UNKNOWN',
+          error: error instanceof Error ? error.message : "Unknown error",
+          errorType: error instanceof TRPCError ? error.code : "UNKNOWN",
           stack: error instanceof Error ? error.stack : undefined,
           timestamp: new Date().toISOString(),
         });
@@ -292,13 +298,13 @@ export const stravaRouter = createTRPCRouter({
         return segmentDetail;
       } catch (error) {
         const duration = Date.now() - startTime;
-        
+
         console.error(`[STRAVA_SEGMENT_DETAIL_ERROR]`, {
           userId,
           segmentId: input.segmentId,
           duration: `${duration}ms`,
-          error: error instanceof Error ? error.message : 'Unknown error',
-          errorType: error instanceof TRPCError ? error.code : 'UNKNOWN',
+          error: error instanceof Error ? error.message : "Unknown error",
+          errorType: error instanceof TRPCError ? error.code : "UNKNOWN",
           stack: error instanceof Error ? error.stack : undefined,
           timestamp: new Date().toISOString(),
         });

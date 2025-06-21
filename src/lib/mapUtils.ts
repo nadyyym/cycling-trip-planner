@@ -45,7 +45,7 @@ export function segmentsToGeoJSON(segments: SegmentDTO[]) {
         const decodeStart = Date.now();
         coordinates = decodePolyline(segment.polyline);
         const decodeDuration = Date.now() - decodeStart;
-        
+
         polylineSuccessCount++;
 
         console.log(`[MAPBOX_POLYLINE_DECODE_SUCCESS]`, {
@@ -59,16 +59,16 @@ export function segmentsToGeoJSON(segments: SegmentDTO[]) {
       } catch (error) {
         polylineFailureCount++;
         fallbackSegments.push(segment.id);
-        
+
         console.warn(`[MAPBOX_POLYLINE_DECODE_ERROR]`, {
           segmentId: segment.id,
           segmentName: segment.name,
           polylineLength: segment.polyline?.length,
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: error instanceof Error ? error.message : "Unknown error",
           fallbackUsed: true,
           timestamp: new Date().toISOString(),
         });
-        
+
         // Fall back to straight line
         coordinates = [
           [segment.lonStart, segment.latStart],
@@ -102,7 +102,10 @@ export function segmentsToGeoJSON(segments: SegmentDTO[]) {
   });
 
   const totalDuration = Date.now() - startTime;
-  const polylineSuccessRate = segments.length > 0 ? ((polylineSuccessCount / segments.length) * 100).toFixed(1) : 0;
+  const polylineSuccessRate =
+    segments.length > 0
+      ? ((polylineSuccessCount / segments.length) * 100).toFixed(1)
+      : 0;
 
   console.log(`[MAPBOX_GEOJSON_CONVERSION_COMPLETE]`, {
     segmentCount: segments.length,
@@ -111,7 +114,10 @@ export function segmentsToGeoJSON(segments: SegmentDTO[]) {
     polylineSuccessRate: `${polylineSuccessRate}%`,
     fallbackSegments,
     totalDuration: `${totalDuration}ms`,
-    avgProcessingTime: segments.length > 0 ? `${Math.round(totalDuration / segments.length)}ms` : '0ms',
+    avgProcessingTime:
+      segments.length > 0
+        ? `${Math.round(totalDuration / segments.length)}ms`
+        : "0ms",
     timestamp: new Date().toISOString(),
   });
 
@@ -160,11 +166,11 @@ export function getSegmentBounds(
     } catch (error) {
       console.warn(`[MAPBOX_BOUNDS_POLYLINE_ERROR]`, {
         segmentId: segment.id,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
         fallbackUsed: true,
         timestamp: new Date().toISOString(),
       });
-      
+
       // Fall back to start/end points
       coordinates = [
         [segment.lonStart, segment.latStart],
@@ -215,13 +221,13 @@ export function getSegmentBounds(
 export function getSegmentCenter(segment: SegmentDTO): [number, number] {
   const centerLng = (segment.lonStart + segment.lonEnd) / 2;
   const centerLat = (segment.latStart + segment.latEnd) / 2;
-  
+
   console.log(`[MAPBOX_SEGMENT_CENTER]`, {
     segmentId: segment.id,
     segmentName: segment.name,
     center: [centerLng, centerLat],
     timestamp: new Date().toISOString(),
   });
-  
+
   return [centerLng, centerLat];
 }

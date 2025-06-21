@@ -24,7 +24,7 @@ export class LRUCache<T> {
   private readonly ttlMs: number;
   private totalGets = 0;
   private totalHits = 0;
-  private totalMisses = 0;  
+  private totalMisses = 0;
   private totalSets = 0;
   private totalEvictions = 0;
   private totalExpired = 0;
@@ -45,10 +45,19 @@ export class LRUCache<T> {
    * Generate a cache key from bounding box coordinates
    * Rounds coordinates to 4 decimal places for consistent hashing
    */
-  static boundsToKey(bounds: { sw: [number, number]; ne: [number, number] }): string {
+  static boundsToKey(bounds: {
+    sw: [number, number];
+    ne: [number, number];
+  }): string {
     const { sw, ne } = bounds;
-    const swRounded = [Math.round(sw[0] * 10000) / 10000, Math.round(sw[1] * 10000) / 10000];
-    const neRounded = [Math.round(ne[0] * 10000) / 10000, Math.round(ne[1] * 10000) / 10000];
+    const swRounded = [
+      Math.round(sw[0] * 10000) / 10000,
+      Math.round(sw[1] * 10000) / 10000,
+    ];
+    const neRounded = [
+      Math.round(ne[0] * 10000) / 10000,
+      Math.round(ne[1] * 10000) / 10000,
+    ];
     return `${swRounded[0]},${swRounded[1]},${neRounded[0]},${neRounded[1]}`;
   }
 
@@ -58,7 +67,7 @@ export class LRUCache<T> {
   get(key: string): T | undefined {
     this.totalGets++;
     const entry = this.cache.get(key);
-    
+
     if (!entry) {
       this.totalMisses++;
       console.log(`[CACHE_MISS]`, {
@@ -79,7 +88,7 @@ export class LRUCache<T> {
       this.cache.delete(key);
       this.totalMisses++;
       this.totalExpired++;
-      
+
       console.log(`[CACHE_EXPIRED]`, {
         key,
         age: `${Math.round(age / 1000)}s`,
@@ -89,14 +98,14 @@ export class LRUCache<T> {
         cacheSize: this.cache.size,
         timestamp: new Date().toISOString(),
       });
-      
+
       return undefined;
     }
 
     // Cache hit - update access count for LRU tracking
     entry.accessCount++;
     this.totalHits++;
-    
+
     // Move to end (most recently used)
     this.cache.delete(key);
     this.cache.set(key, entry);
@@ -145,7 +154,9 @@ export class LRUCache<T> {
 
           console.log(`[CACHE_EVICTION]`, {
             evictedKey: firstKey,
-            evictedAge: evictedEntry ? `${Math.round((now - evictedEntry.timestamp) / 1000)}s` : 'unknown',
+            evictedAge: evictedEntry
+              ? `${Math.round((now - evictedEntry.timestamp) / 1000)}s`
+              : "unknown",
             evictedAccessCount: evictedEntry?.accessCount ?? 0,
             totalEvictions: this.totalEvictions,
             cacheSize: this.cache.size,
@@ -188,7 +199,7 @@ export class LRUCache<T> {
     if (now - entry.timestamp > this.ttlMs) {
       this.cache.delete(key);
       this.totalExpired++;
-      
+
       console.log(`[CACHE_HAS_EXPIRED]`, {
         key,
         age: `${Math.round((now - entry.timestamp) / 1000)}s`,
@@ -196,7 +207,7 @@ export class LRUCache<T> {
         totalExpired: this.totalExpired,
         timestamp: new Date().toISOString(),
       });
-      
+
       return false;
     }
 
@@ -209,7 +220,7 @@ export class LRUCache<T> {
   clear(): void {
     const clearedCount = this.cache.size;
     this.cache.clear();
-    
+
     // Reset stats
     this.totalGets = 0;
     this.totalHits = 0;
@@ -329,22 +340,26 @@ export const segmentExploreCache = new LRUCache<unknown>({
  * Periodically clean up expired cache entries and log cache performance
  * Runs every 2 minutes to remove expired entries
  */
-setInterval(() => {
-  console.log(`[CACHE_PERIODIC_CLEANUP_START]`, {
-    timestamp: new Date().toISOString(),
-  });
-  
-  segmentExploreCache.cleanup();
-  
-  // Log periodic stats for monitoring
-  const stats = segmentExploreCache.getStats();
-  
-  console.log(`[CACHE_PERIODIC_STATS]`, {
-    ...stats,
-    entries: stats.entries.length, // Don't log full entries, just count
-    averageAge: stats.entries.length > 0 ? 
-      `${Math.round(stats.entries.reduce((sum, e) => sum + e.age, 0) / stats.entries.length / 1000)}s` : 
-      '0s',
-    timestamp: new Date().toISOString(),
-  });
-}, 2 * 60 * 1000); 
+setInterval(
+  () => {
+    console.log(`[CACHE_PERIODIC_CLEANUP_START]`, {
+      timestamp: new Date().toISOString(),
+    });
+
+    segmentExploreCache.cleanup();
+
+    // Log periodic stats for monitoring
+    const stats = segmentExploreCache.getStats();
+
+    console.log(`[CACHE_PERIODIC_STATS]`, {
+      ...stats,
+      entries: stats.entries.length, // Don't log full entries, just count
+      averageAge:
+        stats.entries.length > 0
+          ? `${Math.round(stats.entries.reduce((sum, e) => sum + e.age, 0) / stats.entries.length / 1000)}s`
+          : "0s",
+      timestamp: new Date().toISOString(),
+    });
+  },
+  2 * 60 * 1000,
+);

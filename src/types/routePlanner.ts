@@ -54,7 +54,7 @@ export type DayRoute = z.infer<typeof DayRouteSchema>;
  */
 export const PlannerErrorSchema = z.union([
   z.literal("dailyLimitExceeded"),
-  z.literal("needMoreDays"), 
+  z.literal("needMoreDays"),
   z.literal("segmentTooFar"),
   z.literal("externalApi"),
   z.literal("notImplemented"),
@@ -86,4 +86,4 @@ export const PlanResponseSchema = z.discriminatedUnion("ok", [
   }),
 ]);
 
-export type PlanResponse = z.infer<typeof PlanResponseSchema>; 
+export type PlanResponse = z.infer<typeof PlanResponseSchema>;

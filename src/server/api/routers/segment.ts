@@ -7,22 +7,24 @@ import { segments } from "~/server/db/schema";
 
 // Input validation schemas
 const saveSegmentsSchema = z.object({
-  segments: z.array(z.object({
-    id: z.string(),
-    name: z.string(),
-    distance: z.number(),
-    averageGrade: z.number(),
-    polyline: z.string().optional(),
-    latStart: z.number(),
-    lonStart: z.number(),
-    latEnd: z.number(),
-    lonEnd: z.number(),
-    elevHigh: z.number().optional(),
-    elevLow: z.number().optional(),
-    komTime: z.string().optional(),
-    climbCategory: z.string().optional(),
-    elevationGain: z.number().optional(),
-  })),
+  segments: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      distance: z.number(),
+      averageGrade: z.number(),
+      polyline: z.string().optional(),
+      latStart: z.number(),
+      lonStart: z.number(),
+      latEnd: z.number(),
+      lonEnd: z.number(),
+      elevHigh: z.number().optional(),
+      elevLow: z.number().optional(),
+      komTime: z.string().optional(),
+      climbCategory: z.string().optional(),
+      elevationGain: z.number().optional(),
+    }),
+  ),
 });
 
 const getSavedSegmentsSchema = z.object({
@@ -43,9 +45,15 @@ export const segmentRouter = createTRPCRouter({
       console.log(`[SEGMENT_SAVE_MANY_START]`, {
         userId,
         segmentCount: input.segments.length,
-        segmentIds: input.segments.map(s => s.id),
+        segmentIds: input.segments.map((s) => s.id),
         totalDistance: input.segments.reduce((sum, s) => sum + s.distance, 0),
-        avgGrade: input.segments.length > 0 ? (input.segments.reduce((sum, s) => sum + s.averageGrade, 0) / input.segments.length).toFixed(2) : 0,
+        avgGrade:
+          input.segments.length > 0
+            ? (
+                input.segments.reduce((sum, s) => sum + s.averageGrade, 0) /
+                input.segments.length
+              ).toFixed(2)
+            : 0,
         timestamp: new Date().toISOString(),
       });
 
@@ -55,13 +63,22 @@ export const segmentRouter = createTRPCRouter({
         const existingSegments = await ctx.db
           .select({ id: segments.id })
           .from(segments)
-          .where(inArray(segments.id, input.segments.map(s => BigInt(s.id))));
+          .where(
+            inArray(
+              segments.id,
+              input.segments.map((s) => BigInt(s.id)),
+            ),
+          );
         const existingQueryDuration = Date.now() - existingQueryStart;
 
-        const existingSegmentIds = new Set(existingSegments.map(s => s.id.toString()));
-        
+        const existingSegmentIds = new Set(
+          existingSegments.map((s) => s.id.toString()),
+        );
+
         // Filter out segments that already exist
-        const segmentsToSave = input.segments.filter(s => !existingSegmentIds.has(s.id));
+        const segmentsToSave = input.segments.filter(
+          (s) => !existingSegmentIds.has(s.id),
+        );
 
         console.log(`[SEGMENT_SAVE_MANY_EXISTING_CHECK]`, {
           userId,
@@ -74,10 +91,10 @@ export const segmentRouter = createTRPCRouter({
         });
 
         let savedCount = 0;
-        
+
         if (segmentsToSave.length > 0) {
           // Convert segments to database format
-          const segmentData = segmentsToSave.map(segment => ({
+          const segmentData = segmentsToSave.map((segment) => ({
             id: BigInt(segment.id),
             name: segment.name,
             distance: segment.distance,
@@ -105,7 +122,10 @@ export const segmentRouter = createTRPCRouter({
             insertDuration: `${insertDuration}ms`,
             savedCount,
             avgInsertTime: `${Math.round(insertDuration / savedCount)}ms`,
-            segmentsSaved: segmentsToSave.map(s => ({ id: s.id, name: s.name })),
+            segmentsSaved: segmentsToSave.map((s) => ({
+              id: s.id,
+              name: s.name,
+            })),
             timestamp: new Date().toISOString(),
           });
         }
@@ -130,12 +150,12 @@ export const segmentRouter = createTRPCRouter({
         };
       } catch (error) {
         const duration = Date.now() - startTime;
-        
+
         console.error(`[SEGMENT_SAVE_MANY_ERROR]`, {
           userId,
           duration: `${duration}ms`,
           segmentCount: input.segments.length,
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: error instanceof Error ? error.message : "Unknown error",
           stack: error instanceof Error ? error.stack : undefined,
           timestamp: new Date().toISOString(),
         });
@@ -178,9 +198,14 @@ export const segmentRouter = createTRPCRouter({
         const savedSegments = await ctx.db
           .select({ id: segments.id })
           .from(segments)
-          .where(inArray(segments.id, input.segmentIds.map(id => BigInt(id))));
+          .where(
+            inArray(
+              segments.id,
+              input.segmentIds.map((id) => BigInt(id)),
+            ),
+          );
 
-        const result = savedSegments.map(s => s.id.toString());
+        const result = savedSegments.map((s) => s.id.toString());
         const duration = Date.now() - startTime;
 
         console.log(`[SEGMENT_GET_SAVED_STATUS_SUCCESS]`, {
@@ -196,16 +221,16 @@ export const segmentRouter = createTRPCRouter({
         return result;
       } catch (error) {
         const duration = Date.now() - startTime;
-        
+
         console.error(`[SEGMENT_GET_SAVED_STATUS_ERROR]`, {
           userId,
           duration: `${duration}ms`,
           segmentCount: input.segmentIds.length,
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: error instanceof Error ? error.message : "Unknown error",
           stack: error instanceof Error ? error.stack : undefined,
           timestamp: new Date().toISOString(),
         });
-        
+
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Failed to get saved status",
@@ -213,4 +238,4 @@ export const segmentRouter = createTRPCRouter({
         });
       }
     }),
-}); 
+});
