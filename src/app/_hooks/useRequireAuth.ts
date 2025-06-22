@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react";
 /**
  * Type for trigger sources that require authentication
  */
-export type AuthTriggerSource = "sidebar-save" | "empty-state" | "itinerary-save" | "gpx-download";
+export type AuthTriggerSource = "sidebar-save" | "empty-state" | "itinerary-save" | "gpx-download" | "segment-discovery";
 
 /**
  * Hook for managing authentication requirements for actions

@@ -8,6 +8,8 @@ import { useToast } from "~/hooks/use-toast";
 import { FixedSizeList as List } from "react-window";
 import { SignInModal } from "./SignInModal";
 import { useRequireAuth } from "../_hooks/useRequireAuth";
+import { StravaSignInPrompt } from "./StravaSignInPrompt";
+import { useSession } from "next-auth/react";
 
 interface SegmentListSidebarProps {
   segments: SegmentDTO[];
@@ -15,6 +17,8 @@ interface SegmentListSidebarProps {
   error: { message: string } | null;
   debouncedBounds: { sw: [number, number]; ne: [number, number] } | null;
   isRateLimited?: boolean;
+  /** Function to refetch segments after sign-in */
+  onRefreshSegments?: () => void;
 }
 
 interface SegmentItemProps {
@@ -175,6 +179,7 @@ export function SegmentListSidebar({
   error,
   debouncedBounds,
   isRateLimited = false,
+  onRefreshSegments,
 }: SegmentListSidebarProps) {
   const {
     highlightedSegmentId,
@@ -186,12 +191,19 @@ export function SegmentListSidebar({
     setOnLimitReached,
   } = useSegmentStore();
 
+  // Check authentication status
+  const { data: session } = useSession();
+  const isAuthenticated = !!session;
+
   // Toast for user notifications
   const { toast } = useToast();
 
   // Auth guard for save to favourites functionality
   const { requireAuth, isModalOpen, triggerSource, onSignInSuccess, onModalClose } = 
     useRequireAuth("sidebar-save");
+
+  // Auth guard for segment discovery sign-in prompt
+  const segmentDiscoveryAuth = useRequireAuth("segment-discovery");
 
   // Set up limit reached callback to show toast notifications
   useEffect(() => {
@@ -488,17 +500,33 @@ export function SegmentListSidebar({
             </div>
           )}
 
-          {/* Empty state */}
+          {/* Empty state - show sign-in prompt if not authenticated, otherwise show regular empty state */}
           {!isLoading && !error && segments.length === 0 && debouncedBounds && (
-            <div className="py-8 text-center">
-              <div className="mb-3 text-4xl text-gray-400">🚴‍♀️</div>
-              <div className="mb-1 text-sm font-medium text-gray-900">
-                No segments in view
-              </div>
-              <div className="text-sm text-gray-500">
-                Try zooming out or exploring a different location
-              </div>
-            </div>
+            <>
+              {!isAuthenticated ? (
+                <StravaSignInPrompt
+                  title="Sign in with Strava to find segments"
+                  description="Connect your Strava account to discover cycling segments in this area and start planning your trips."
+                  icon="🚴‍♀️"
+                  onSignIn={() => {
+                    segmentDiscoveryAuth.requireAuth(() => {
+                      // Refresh segments after successful sign-in
+                      onRefreshSegments?.();
+                    });
+                  }}
+                />
+              ) : (
+                <div className="py-8 text-center">
+                  <div className="mb-3 text-4xl text-gray-400">🚴‍♀️</div>
+                  <div className="mb-1 text-sm font-medium text-gray-900">
+                    No segments in view
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    Try zooming out or exploring a different location
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           {/* No bounds yet */}
@@ -534,6 +562,14 @@ export function SegmentListSidebar({
         onClose={onModalClose}
         triggerSource={triggerSource}
         onSignInSuccess={onSignInSuccess}
+      />
+
+      {/* Sign-in modal for segment discovery */}
+      <SignInModal
+        isOpen={segmentDiscoveryAuth.isModalOpen}
+        onClose={segmentDiscoveryAuth.onModalClose}
+        triggerSource={segmentDiscoveryAuth.triggerSource}
+        onSignInSuccess={segmentDiscoveryAuth.onSignInSuccess}
       />
     </div>
   );

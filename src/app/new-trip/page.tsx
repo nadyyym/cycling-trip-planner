@@ -57,6 +57,33 @@ function NewTripPageContent() {
     lastProcessedSavedTrip.current = null;
   }, [segmentIds]);
 
+  // Function to retry trip planning (used after sign-in)
+  const retryPlanning = () => {
+    if (
+      segmentIds.length > 0 &&
+      constraints.startDate &&
+      constraints.endDate
+    ) {
+      console.log("[NEW_TRIP_RETRY_PLANNING]", {
+        segmentCount: segmentIds.length,
+        segmentIds: segmentIds,
+        timestamp: new Date().toISOString(),
+      });
+
+      planningAttempted.current = false; // Reset flag to allow re-planning
+
+      const input: TripPlanInput = {
+        segmentIds: segmentIds,
+        startDate: constraints.startDate,
+        endDate: constraints.endDate,
+        maxDailyDistanceKm: constraints.maxDailyDistanceKm,
+        maxDailyElevationM: constraints.maxDailyElevationM,
+      };
+
+      planTrip(input);
+    }
+  };
+
   useEffect(() => {
     if (
       segmentIds.length > 0 && 
@@ -236,6 +263,7 @@ function NewTripPageContent() {
         error={isError ? error : null}
         currentTrip={currentTrip}
         planResponse={data}
+        onRetryPlanning={retryPlanning}
       />
 
       {/* Map container */}

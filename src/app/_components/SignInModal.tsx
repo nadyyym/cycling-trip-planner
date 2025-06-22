@@ -18,7 +18,7 @@ interface SignInModalProps {
   /** Callback when modal is closed */
   onClose: () => void;
   /** The source that triggered the auth prompt (for analytics) */
-  triggerSource: "sidebar-save" | "empty-state" | "itinerary-save" | "gpx-download";
+  triggerSource: "sidebar-save" | "empty-state" | "itinerary-save" | "gpx-download" | "segment-discovery";
   /** Optional callback to execute after successful sign-in */
   onSignInSuccess?: () => void;
 }
@@ -106,8 +106,13 @@ export function SignInModal({
         };
       case "empty-state":
         return {
-          title: "Sign in to View Favourites",
-          description: "Connect with Strava to access your saved segments and manage your cycling favorites."
+          title: "Sign in to Find Segments",
+          description: "Connect with Strava to discover cycling segments in this area and start planning your trips."
+        };
+      case "segment-discovery":
+        return {
+          title: "Sign in to Find Segments",
+          description: "Connect with Strava to discover cycling segments in this area and start planning your trips."
         };
       case "itinerary-save":
         return {

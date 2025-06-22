@@ -116,6 +116,7 @@ export default function ExplorePage() {
     segmentsGeoJSON,
     isLoading: isLoadingSegments,
     error: segmentError,
+    refetch: refetchSegments,
   } = useSegmentExplore(debouncedBounds);
 
   // Get saved segments (used to be "starred")
@@ -826,6 +827,7 @@ export default function ExplorePage() {
             error={segmentError}
             debouncedBounds={debouncedBounds}
             isRateLimited={isSegmentRateLimited}
+            onRefreshSegments={() => void refetchSegments()}
           />
         </div>
 
