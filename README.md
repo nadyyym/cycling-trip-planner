@@ -203,8 +203,8 @@ PUBLIC_TRIP_BASE_URL="http://localhost:3000" # Base URL for shareable trip links
 - `constraints` (jsonb) - User's input constraints (maxDailyDistanceKm, etc.)
 - `totalDistanceKm` (real)
 - `totalElevationM` (real)
-- `days` (jsonb) - Array of day objects with start_locality, end_locality, distance, elevation, etc.
-- `geometryS3Key` (text, nullable) - S3 key for compressed GeoJSON of full geometry
+- `days` (jsonb) - Array of day objects with start_locality, end_locality, distance, elevation, **route geometry**, etc.
+- `geometryS3Key` (text, nullable) - S3 key for compressed GeoJSON of full geometry (future use)
 - `slug` (varchar, unique) - SEO-friendly unique identifier for shareable URLs
 
 ## Features
@@ -623,6 +623,14 @@ This script processes segments in batches of 500 and:
 - **Commit 9-P**: Docs & example script
 
 ### ✅ Trip Planning UI
+- **Route Geometry Storage & Display**: Complete route polyline persistence ✅
+  - **Full Route Geometry Storage**: Trip saving now preserves complete route polylines from route planner
+  - **Real Route Display**: Trip display pages show actual cycling routes (not placeholder coordinates)
+  - **Database Integration**: Route geometry stored in `days` JSONB field for immediate access
+  - **Backwards Compatibility**: Graceful fallback to placeholder geometry for older trips
+  - **Enhanced GPX Export**: Downloaded GPX files contain actual route polylines
+  - **Debugging Support**: Comprehensive logging to track geometry storage and retrieval
+  - **Performance Optimized**: Efficient storage in database without S3 complexity
 - **Commit 1-T**: Backend schema enhancement with segment names & Strava links ✅
   - Extended `DayRouteSchema` with `segments` array containing `{id, name, stravaUrl}`
   - Maintained backwards compatibility with deprecated `segmentsVisited` array

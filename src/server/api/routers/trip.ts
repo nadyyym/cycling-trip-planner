@@ -149,6 +149,8 @@ export const tripRouter = createTRPCRouter({
               dayName,
               distanceKm: Math.round(distanceKm),
               elevationM: Math.round(elevationGainM),
+              coordinateCount: coordinates.length,
+              geometryStored: true,
               timestamp: new Date().toISOString(),
             });
 
@@ -162,6 +164,8 @@ export const tripRouter = createTRPCRouter({
               dayName,
               segmentCount: route.segmentsVisited.length,
               segments: route.segments ?? [],
+              // Store the full route geometry for map display
+              geometry: route.geometry,
             };
           })
         );
@@ -291,6 +295,11 @@ export const tripRouter = createTRPCRouter({
         dayCount: Array.isArray(trip.days) ? trip.days.length : 0,
         totalDistanceKm: trip.totalDistanceKm,
         isCreator: ctx.session?.user?.id === trip.creatorUserId,
+        hasStoredGeometry: Array.isArray(trip.days) ? trip.days.every((day: any) => day.geometry) : false,
+        geometryCoordinateCounts: Array.isArray(trip.days) ? trip.days.map((day: any) => ({
+          day: day.day,
+          coordinateCount: day.geometry?.coordinates?.length || 0,
+        })) : [],
         timestamp: new Date().toISOString(),
       });
 
