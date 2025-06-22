@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
+import { createTRPCRouter, protectedProcedure, publicProcedure } from "~/server/api/trpc";
 import { PlanRequestSchema, type PlanResponse } from "~/types/routePlanner";
 import { StravaClient } from "~/server/integrations/strava";
 import {
@@ -10,8 +10,8 @@ import {
   ExternalApiError,
 } from "~/server/integrations/mapbox";
 import { calculateBidirectionalElevation } from "~/server/algorithms/elevation";
-import { accounts } from "~/server/db/schema";
-import { eq } from "drizzle-orm";
+import { accounts, segments } from "~/server/db/schema";
+import { eq, inArray } from "drizzle-orm";
 import { solveOrderedSegments, TSPSolverError } from "~/server/algorithms/tsp";
 import { partitionRoute } from "~/server/algorithms/dailyPartitioner";
 import {
@@ -189,18 +189,23 @@ export const routePlannerRouter = createTRPCRouter({
    * Plan a cycling trip across multiple Strava segments
    * This procedure takes a list of segments and constraints,
    * then returns optimized daily routes or error details
-   * Requires user to be authenticated with Strava to access segment data
+   * Public endpoint that works for anonymous users using cached segment data
+   * Falls back to Strava API for authenticated users when segment data missing
    *
    * All errors are mapped to structured responses with HTTP 200 status
    * Only authentication errors result in HTTP error responses
    */
-  planTrip: protectedProcedure
+  planTrip: publicProcedure
     .input(PlanRequestSchema)
     .mutation(async ({ ctx, input }): Promise<PlanResponse> => {
       const planStart = Date.now();
+      const userId = ctx.session?.user?.id;
+      const isAuthenticated = !!userId;
 
       // Log the planning request for debugging
       console.log(`[ROUTE_PLANNER_START]`, {
+        userId: userId ?? "anonymous",
+        isAuthenticated,
         segmentCount: input.segments.length,
         startDate: input.startDate,
         endDate: input.endDate,
@@ -212,95 +217,203 @@ export const routePlannerRouter = createTRPCRouter({
       });
 
       try {
-        // Step 1: Get user's Strava credentials and segment metadata
+        // Step 1: Get segment metadata (try database first, fallback to Strava API)
         const step1Start = Date.now();
         console.log(
-          `[ROUTE_PLANNER_STEP1_START] Getting Strava credentials and segment metadata`,
+          `[ROUTE_PLANNER_STEP1_START] Getting segment metadata from database`,
         );
 
-        const userId = ctx.session.user.id;
+        // First, try to get segments from our database
+        const segmentIds = input.segments.map((s) => BigInt(s.segmentId));
+        const dbSegments = await ctx.db
+          .select()
+          .from(segments)
+          .where(inArray(segments.id, segmentIds));
 
-        // Get user's Strava credentials from accounts table
-        const dbStart = Date.now();
-        const stravaAccount = await ctx.db.query.accounts.findFirst({
-          where: eq(accounts.userId, userId),
-          columns: {
-            access_token: true,
-            refresh_token: true,
-            expires_at: true,
-          },
-        });
-        const dbDuration = Date.now() - dbStart;
-
-        console.log(`[ROUTE_PLANNER_STRAVA_DB_QUERY]`, {
-          userId,
-          duration: `${dbDuration}ms`,
-          hasAccount: !!stravaAccount,
-          hasTokens: !!(
-            stravaAccount?.access_token && stravaAccount?.refresh_token
-          ),
+        console.log(`[ROUTE_PLANNER_DB_SEGMENTS_QUERY]`, {
+          userId: userId ?? "anonymous",
+          isAuthenticated,
+          requestedSegments: segmentIds.length,
+          foundInDb: dbSegments.length,
+          missingFromDb: segmentIds.length - dbSegments.length,
+          foundIds: dbSegments.map((s) => s.id.toString()),
           timestamp: new Date().toISOString(),
         });
 
-        if (!stravaAccount?.access_token || !stravaAccount?.refresh_token) {
-          console.error(`[ROUTE_PLANNER_STRAVA_AUTH_ERROR]`, {
-            userId,
-            error: "Missing Strava credentials",
-            hasAccount: !!stravaAccount,
-            hasAccessToken: !!stravaAccount?.access_token,
-            hasRefreshToken: !!stravaAccount?.refresh_token,
+        // Create a map for quick lookup
+        const dbSegmentMap = new Map(dbSegments.map((seg) => [seg.id.toString(), seg]));
+        
+        // Build segment metadata array in correct order, tracking missing segments
+        const segmentMetas: Array<{
+          id: string;
+          name: string;
+          distance: number;
+          elevationGain: number;
+          startCoord: [number, number];
+          endCoord: [number, number];
+        }> = [];
+        
+        const missingSegmentIds: string[] = [];
+
+        // Process each input segment in order
+        for (const inputSegment of input.segments) {
+          const segmentId = inputSegment.segmentId.toString();
+          const dbSegment = dbSegmentMap.get(segmentId);
+          
+          if (dbSegment) {
+            // Use database segment data
+            segmentMetas.push({
+              id: segmentId,
+              name: dbSegment.name,
+              distance: dbSegment.distance,
+              elevationGain: dbSegment.elevationGain ?? 0,
+              startCoord: [dbSegment.lonStart, dbSegment.latStart], // Note: [lon, lat] format for coordinates
+              endCoord: [dbSegment.lonEnd, dbSegment.latEnd],
+            });
+          } else {
+            // Mark as missing - we'll need to fetch from Strava API
+            missingSegmentIds.push(segmentId);
+            // Add placeholder that will be replaced later
+            segmentMetas.push({
+              id: segmentId,
+              name: '',
+              distance: 0,
+              elevationGain: 0,
+              startCoord: [0, 0],
+              endCoord: [0, 0],
+            });
+          }
+        }
+
+        // If we have missing segments and user is authenticated, fetch from Strava API
+        if (missingSegmentIds.length > 0) {
+          if (!isAuthenticated) {
+            console.log(`[ROUTE_PLANNER_MISSING_SEGMENTS_ANONYMOUS]`, {
+              userId: "anonymous",
+              missingSegmentIds,
+              message: "Some segments missing from database, authentication required for fresh data",
+              timestamp: new Date().toISOString(),
+            });
+
+            throw new TRPCError({
+              code: "UNAUTHORIZED",
+              message: `Some segments are not available in our database. Please sign in with Strava to fetch missing segment data (${missingSegmentIds.length} segments missing).`,
+            });
+          }
+
+          // For authenticated users: get Strava credentials and fetch missing segments
+          console.log(`[ROUTE_PLANNER_FETCHING_MISSING_SEGMENTS]`, {
+            userId: userId!,
+            missingSegmentIds,
+            message: "Fetching missing segments from Strava API",
             timestamp: new Date().toISOString(),
           });
 
-          throw new TRPCError({
-            code: "UNAUTHORIZED",
-            message:
-              "Strava account not connected. Please sign in with Strava to use route planning.",
+          const dbStart = Date.now();
+          const stravaAccount = await ctx.db.query.accounts.findFirst({
+            where: eq(accounts.userId, userId),
+            columns: {
+              access_token: true,
+              refresh_token: true,
+              expires_at: true,
+            },
+          });
+          const dbDuration = Date.now() - dbStart;
+
+          console.log(`[ROUTE_PLANNER_STRAVA_DB_QUERY]`, {
+            userId: userId!,
+            duration: `${dbDuration}ms`,
+            hasAccount: !!stravaAccount,
+            hasTokens: !!(
+              stravaAccount?.access_token && stravaAccount?.refresh_token
+            ),
+            timestamp: new Date().toISOString(),
+          });
+
+          if (!stravaAccount?.access_token || !stravaAccount?.refresh_token) {
+            console.error(`[ROUTE_PLANNER_STRAVA_AUTH_ERROR]`, {
+              userId: userId!,
+              error: "Missing Strava credentials",
+              hasAccount: !!stravaAccount,
+              hasAccessToken: !!stravaAccount?.access_token,
+              hasRefreshToken: !!stravaAccount?.refresh_token,
+              timestamp: new Date().toISOString(),
+            });
+
+            throw new TRPCError({
+              code: "UNAUTHORIZED",
+              message:
+                "Strava account not connected. Please sign in with Strava to fetch missing segment data.",
+            });
+          }
+
+          // Create Strava client with token refresh callback
+          const stravaClient = new StravaClient(
+            stravaAccount.access_token,
+            stravaAccount.refresh_token,
+            stravaAccount.expires_at ?? 0,
+            async (tokens) => {
+              const tokenUpdateStart = Date.now();
+              console.log(`[ROUTE_PLANNER_TOKEN_REFRESH_CALLBACK]`, {
+                userId: userId!,
+                message: "Updating database with refreshed tokens",
+                timestamp: new Date().toISOString(),
+              });
+
+              // Update tokens in database when they're refreshed
+              await ctx.db
+                .update(accounts)
+                .set({
+                  access_token: tokens.accessToken,
+                  refresh_token: tokens.refreshToken,
+                  expires_at: tokens.expiresAt,
+                })
+                .where(eq(accounts.userId, userId));
+
+              const tokenUpdateDuration = Date.now() - tokenUpdateStart;
+              console.log(`[ROUTE_PLANNER_TOKEN_REFRESH_COMPLETE]`, {
+                userId: userId!,
+                duration: `${tokenUpdateDuration}ms`,
+                timestamp: new Date().toISOString(),
+              });
+            },
+          );
+
+          // Fetch missing segments from Strava API
+          const missingSegmentMetaPromises = missingSegmentIds.map((segmentId) =>
+            stravaClient.getSegmentMeta(segmentId),
+          );
+
+          const missingSegmentMetas = await Promise.all(missingSegmentMetaPromises);
+
+          // Replace placeholders with actual segment metadata in correct order
+          for (let i = 0; i < segmentMetas.length; i++) {
+            const segmentMeta = segmentMetas[i]!;
+            if (missingSegmentIds.includes(segmentMeta.id)) {
+              const fetchedMeta = missingSegmentMetas.find((meta) => meta.id === segmentMeta.id);
+              if (fetchedMeta) {
+                segmentMetas[i] = fetchedMeta;
+              }
+            }
+          }
+
+          console.log(`[ROUTE_PLANNER_MISSING_SEGMENTS_FETCHED]`, {
+            userId: userId!,
+            fetchedCount: missingSegmentMetas.length,
+            totalSegments: segmentMetas.length,
+            timestamp: new Date().toISOString(),
           });
         }
 
-        // Create Strava client with token refresh callback
-        const stravaClient = new StravaClient(
-          stravaAccount.access_token,
-          stravaAccount.refresh_token,
-          stravaAccount.expires_at ?? 0,
-          async (tokens) => {
-            const tokenUpdateStart = Date.now();
-            console.log(`[ROUTE_PLANNER_TOKEN_REFRESH_CALLBACK]`, {
-              userId,
-              message: "Updating database with refreshed tokens",
-              timestamp: new Date().toISOString(),
-            });
-
-            // Update tokens in database when they're refreshed
-            await ctx.db
-              .update(accounts)
-              .set({
-                access_token: tokens.accessToken,
-                refresh_token: tokens.refreshToken,
-                expires_at: tokens.expiresAt,
-              })
-              .where(eq(accounts.userId, userId));
-
-            const tokenUpdateDuration = Date.now() - tokenUpdateStart;
-            console.log(`[ROUTE_PLANNER_TOKEN_REFRESH_COMPLETE]`, {
-              userId,
-              duration: `${tokenUpdateDuration}ms`,
-              timestamp: new Date().toISOString(),
-            });
-          },
-        );
-
-        const segmentMetaPromises = input.segments.map((segment) =>
-          stravaClient.getSegmentMeta(segment.segmentId.toString()),
-        );
-
-        const segmentMetas = await Promise.all(segmentMetaPromises);
         const step1Duration = Date.now() - step1Start;
 
         console.log(`[ROUTE_PLANNER_STEP1_COMPLETE]`, {
+          userId: userId ?? "anonymous",
+          isAuthenticated,
           duration: `${step1Duration}ms`,
           segmentCount: segmentMetas.length,
+          fromDatabase: dbSegments.length,
+          fromStrava: missingSegmentIds.length,
           segments: segmentMetas.map((meta) => ({
             id: meta.id,
             name: meta.name,
@@ -471,6 +584,8 @@ export const routePlannerRouter = createTRPCRouter({
         const totalDuration = Date.now() - planStart;
 
         console.log(`[ROUTE_PLANNER_STEP2_READY]`, {
+          userId: userId ?? "anonymous",
+          isAuthenticated,
           totalDuration: `${totalDuration}ms`,
           contextReady: true,
           segmentCount: segmentMetas.length,
