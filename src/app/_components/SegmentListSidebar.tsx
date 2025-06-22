@@ -108,12 +108,8 @@ export function SegmentListSidebar({
   }, [favouriteSegmentIds, selectedSegmentIds]);
 
   const handleCardHover = (segmentId: string | null) => {
+    // Only highlight segments on hover, don't toggle selection
     highlightSegment(segmentId);
-    
-    // Hover also toggles selection (per PRD requirement)
-    if (segmentId) {
-      toggleSegmentSelection(segmentId, "hover");
-    }
   };
 
   const handleCardClick = (segmentId: string) => {
@@ -198,13 +194,22 @@ export function SegmentListSidebar({
             )}
           </h3>
 
+          {/* Selection instructions */}
+          {segments.length > 0 && selectedSegmentIds.size === 0 && (
+            <div className="mb-4 rounded-lg bg-gray-50 p-3">
+              <div className="text-xs text-gray-600">
+                💡 <strong>Click on cards</strong> to select segments for trip planning or favourites
+              </div>
+            </div>
+          )}
+
           {/* Selection controls */}
           {selectedSegmentIds.size > 0 && (
             <div className="mb-4 rounded-lg bg-blue-50 p-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-blue-900">
                   {selectedSegmentIds.size} segment
-                  {selectedSegmentIds.size === 1 ? "" : "s"}
+                  {selectedSegmentIds.size === 1 ? "" : "s"} selected
                 </span>
                 <div className="flex gap-2">
                   <button
@@ -334,8 +339,8 @@ export function SegmentListSidebar({
                       isHighlighted
                         ? "border-pink-300 bg-pink-50 shadow-md"
                         : isSelected
-                          ? "border-blue-300 bg-blue-50"
-                          : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                          ? "border-blue-300 bg-blue-50 shadow-sm"
+                          : "border-gray-200 hover:border-blue-200 hover:bg-blue-50/50 hover:shadow-sm"
                     }`}
                     onMouseEnter={() => handleCardHover(segment.id)}
                     onMouseLeave={() => handleCardHover(null)}
@@ -348,7 +353,7 @@ export function SegmentListSidebar({
                     }}
                     role="button"
                     tabIndex={0}
-                    aria-label={`View segment: ${segment.name}`}
+                    aria-label={`${isSelected ? 'Deselect' : 'Select'} segment: ${segment.name}`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
