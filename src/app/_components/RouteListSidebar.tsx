@@ -35,18 +35,30 @@ export function RouteListSidebar({
     if (!currentTrip || !planResponse?.ok) return;
 
     try {
-      // Convert current trip data to GPX format
-      const routesForGPX: RouteForGPX[] = currentTrip.routes.map((route) => ({
-        dayNumber: route.dayNumber,
-        geometry: route.geometry,
-        distanceKm: route.distanceKm,
-        elevationGainM: route.elevationGainM, // Legacy field for backward compatibility
-        ascentM: route.ascentM,
-        descentM: route.descentM,
-        segmentNames: route.segmentNames,
-      }));
+      // Convert current trip data to GPX format with locality names when available
+      const routesForGPX: RouteForGPX[] = currentTrip.routes.map((route) => {
+        // Find saved day data for this route
+        const savedDayData = currentTrip.savedTripData?.days.find(d => d.day === route.dayNumber);
+        
+        return {
+          dayNumber: route.dayNumber,
+          geometry: route.geometry,
+          distanceKm: route.distanceKm,
+          elevationGainM: route.elevationGainM, // Legacy field for backward compatibility
+          ascentM: route.ascentM,
+          descentM: route.descentM,
+          segmentNames: route.segmentNames,
+          // Include locality names and formatted day name if available
+          startLocality: savedDayData?.startLocality,
+          endLocality: savedDayData?.endLocality,
+          dayName: savedDayData?.dayName,
+        };
+      });
 
-      await downloadRoutesAsZip(routesForGPX);
+      // Get trip start date from constraints if available
+      const tripStartDate = currentTrip.savedTripData ? new Date() : undefined; // TODO: Get actual start date from constraints
+
+      await downloadRoutesAsZip(routesForGPX, tripStartDate);
 
       toast({
         title: "📁 Download Started!",

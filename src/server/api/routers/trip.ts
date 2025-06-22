@@ -119,8 +119,8 @@ export const tripRouter = createTRPCRouter({
             }
 
             // Get start and end coordinates
-            const startCoord = coordinates[0] as [number, number];
-            const endCoord = coordinates[coordinates.length - 1] as [number, number];
+            const startCoord = coordinates[0]!;
+            const endCoord = coordinates[coordinates.length - 1]!
 
             console.log(`[TRIP_SAVE_GEOCODING_DAY]`, {
               dayNumber,

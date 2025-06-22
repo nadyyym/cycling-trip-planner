@@ -75,8 +75,8 @@ function NewTripPageContent() {
   const savingAttempted = useRef(false);
   
   // Reference to track the last processed trip data to avoid re-processing
-  const lastProcessedData = useRef<any>(null);
-  const lastProcessedSavedTrip = useRef<any>(null);
+  const lastProcessedData = useRef<typeof data>(null);
+  const lastProcessedSavedTrip = useRef<typeof savedTrip>(null);
 
   // Initialize map
   useEffect(() => {

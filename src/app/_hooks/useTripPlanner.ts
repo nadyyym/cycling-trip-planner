@@ -50,7 +50,10 @@ export function useTripPlanner() {
             dayNumber: number;
             distanceKm: number;
             elevationGainM: number;
-            geometry: any;
+            geometry: {
+              type: "LineString";
+              coordinates: [number, number][];
+            };
             segments?: Array<{ id: number; name: string; stravaUrl: string }>;
             durationMinutes: number;
           }) => ({
