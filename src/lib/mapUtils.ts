@@ -201,7 +201,7 @@ function decodePolyline(encoded: string): [number, number][] {
   // Decode and cache result
   const decoded = polyline.decode(encoded);
   // polyline.decode returns [lat, lng] but we need [lng, lat] for GeoJSON
-  const coordinates = decoded.map((coord) => [coord[1], coord[0]]) as [number, number][];
+  const coordinates: [number, number][] = decoded.map((coord) => [coord[1], coord[0]]);
   
   // Cache the result
   polylineCache.set(encoded, coordinates);

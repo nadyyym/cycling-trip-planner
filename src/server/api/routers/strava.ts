@@ -6,7 +6,7 @@ import {
   StravaClient,
   type BoundsInput,
   type SegmentDTO,
-  type PolylineDetail,
+  // type PolylineDetail, // Unused for now but kept for future use
 } from "~/server/integrations/strava";
 import { accounts, segments } from "~/server/db/schema";
 import { eq, inArray, sql, and, gte } from "drizzle-orm";

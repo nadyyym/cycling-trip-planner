@@ -161,7 +161,7 @@ function partitionRouteWithConstraints(
   matrix: CostMatrix,
   constraints: TripConstraints,
   maxDays: number,
-  tripStartIndex?: number,
+  _tripStartIndex?: number, // Unused parameter but kept for interface compatibility
 ): PartitionResult {
   const partitions: DayPartition[] = [];
   

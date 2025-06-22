@@ -9,8 +9,8 @@ import { useSegmentExplore } from "../_hooks/useSegmentExplore";
 import { useSegmentStore } from "../_hooks/useSegmentStore";
 import { useRateLimitHandler } from "../_hooks/useRateLimitHandler";
 import { useTripRouteStore } from "../_hooks/useTripRouteStore";
-import { api } from "~/trpc/react";
-import { segmentsToGeoJSON } from "~/lib/mapUtils";
+// import { api } from "~/trpc/react"; // Unused for now
+// import { segmentsToGeoJSON } from "~/lib/mapUtils"; // Unused for now
 import {
   reverseGeocode,
   type LocationInfo,
@@ -57,12 +57,12 @@ export default function ExplorePage() {
   const latRef = useRef(51.5074);
   const zoomRef = useRef(10);
   
-  // State for displaying coordinates (throttled updates)
-  const [displayCoords, setDisplayCoords] = useState({
-    lng: lngRef.current,
-    lat: latRef.current,
-    zoom: zoomRef.current,
-  });
+  // State for displaying coordinates (throttled updates) - currently unused but kept for future use
+  // const [displayCoords, setDisplayCoords] = useState({
+  //   lng: lngRef.current,
+  //   lat: latRef.current,
+  //   zoom: zoomRef.current,
+  // });
 
   const [mapError, setMapError] = useState<string | null>(null);
 
@@ -317,12 +317,12 @@ export default function ExplorePage() {
                latRef.current = Number(center.lat.toFixed(4));
                zoomRef.current = Number(currentZoom.toFixed(2));
 
-               // Throttled update for display coordinates (less frequent re-renders)
-               setDisplayCoords({
-                 lng: lngRef.current,
-                 lat: latRef.current,
-                 zoom: zoomRef.current,
-               });
+               // Throttled update for display coordinates (less frequent re-renders) - currently unused
+               // setDisplayCoords({
+               //   lng: lngRef.current,
+               //   lat: latRef.current,
+               //   zoom: zoomRef.current,
+               // });
 
                // Update map bounds for segment exploration
               if (currentBounds) {

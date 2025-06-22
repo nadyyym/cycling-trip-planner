@@ -4,7 +4,7 @@ import { PlanRequestSchema, type PlanResponse } from "~/types/routePlanner";
 import { StravaClient } from "~/server/integrations/strava";
 import {
   getMatrix,
-  calculateElevationFromCoordinates,
+  // calculateElevationFromCoordinates, // Unused for now but kept for future use
   type Coordinate,
   type CostMatrix,
   ExternalApiError,

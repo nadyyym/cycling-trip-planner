@@ -5,7 +5,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { 
-  Home, 
   Compass, 
   MapPin, 
   Heart, 
@@ -39,7 +38,6 @@ interface NavigationItem {
 }
 
 const navigationItems: NavigationItem[] = [
-  { title: "Home", href: "/", icon: <Home className="h-4 w-4" /> },
   { title: "Explore", href: "/explore", icon: <Compass className="h-4 w-4" /> },
   { title: "Plan Trip", href: "/new-trip", icon: <MapPin className="h-4 w-4" /> },
   { title: "Favourites", href: "/favourites", icon: <Heart className="h-4 w-4" /> },
@@ -78,7 +76,7 @@ export const CyclingHeader: React.FC = () => {
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
-          <Link href="/" className="flex items-center space-x-2 hover:opacity-80 transition-opacity">
+          <Link href="/explore" className="flex items-center space-x-2 hover:opacity-80 transition-opacity">
             <Bike className="h-6 w-6 text-blue-600" />
             <span className="text-xl font-bold text-foreground">Cycling Trip Planner</span>
           </Link>
