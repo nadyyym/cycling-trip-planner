@@ -11,10 +11,11 @@
   NOTE: Add <Header/> to a RootLayout that wraps dashboard pages to enable unified navigation.
 */
 
-import { Bike } from "lucide-react"; // Icon for logo
+import { Bike, Menu, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
 
 import { cn } from "~/lib/utils";
