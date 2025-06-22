@@ -450,6 +450,14 @@ export default function NewTripPage() {
 
   return (
     <div className="flex h-screen">
+      {/* Sidebar */}
+      <RouteListSidebar
+        isLoading={isPending}
+        error={isError ? error : null}
+        currentTrip={currentTrip}
+        planResponse={data}
+      />
+
       {/* Map container */}
       <div className="relative flex-1">
         {/* Back navigation */}
@@ -509,14 +517,6 @@ export default function NewTripPage() {
           Lng: {lng} | Lat: {lat} | Zoom: {zoom}
         </div>
       </div>
-
-      {/* Sidebar */}
-      <RouteListSidebar
-        isLoading={isPending}
-        error={isError ? error : null}
-        currentTrip={currentTrip}
-        planResponse={data}
-      />
     </div>
   );
 } 
