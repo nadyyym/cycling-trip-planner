@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 
-import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
+import { createTRPCRouter, protectedProcedure, publicProcedure } from "~/server/api/trpc";
 import {
   StravaClient,
   type BoundsInput,
@@ -26,23 +26,25 @@ const segmentIdSchema = z.object({
 export const stravaRouter = createTRPCRouter({
   /**
    * Explore segments within given map bounds
-   * Requires user to be authenticated with Strava
+   * Public endpoint that serves cached segments to anonymous users
+   * Falls back to Strava API for authenticated users when no cached data available
    * Uses LRU cache to reduce API calls and handles rate limiting
    */
-  segmentExplore: protectedProcedure
+  segmentExplore: publicProcedure
     .input(boundsSchema)
     .query(async ({ ctx, input }) => {
-      const userId = ctx.session.user.id;
+      const userId = ctx.session?.user?.id;
+      const isAuthenticated = !!userId;
       const startTime = Date.now();
       const cacheKey = LRUCache.boundsToKey(input);
 
       // Enhanced structured logging for monitoring
       console.log(`[STRAVA_SEGMENT_EXPLORE_START]`, {
-        userId,
+        userId: userId ?? "anonymous",
+        isAuthenticated,
         bounds: input,
         cacheKey,
         timestamp: new Date().toISOString(),
-        sessionId: ctx.session.user.id,
       });
 
       try {
@@ -52,7 +54,8 @@ export const stravaRouter = createTRPCRouter({
           const duration = Date.now() - startTime;
           const segments = cachedResult as SegmentDTO[];
           console.log(`[STRAVA_SEGMENT_EXPLORE_CACHE_HIT]`, {
-            userId,
+            userId: userId ?? "anonymous",
+            isAuthenticated,
             cacheKey,
             duration: `${duration}ms`,
             segmentCount: segments.length,
@@ -62,13 +65,102 @@ export const stravaRouter = createTRPCRouter({
         }
 
         console.log(`[STRAVA_SEGMENT_EXPLORE_CACHE_MISS]`, {
-          userId,
+          userId: userId ?? "anonymous",
+          isAuthenticated,
           cacheKey,
-          message: "Fetching from Strava API",
+          message: "Checking database for cached segments",
           timestamp: new Date().toISOString(),
         });
 
-        // Get user's Strava credentials from accounts table
+        // First, try to get segments from our database within the bounds
+        // This works for both authenticated and anonymous users
+        const dbSearchStart = Date.now();
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        
+        // Query segments within bounds that are less than 7 days old
+        const dbSegments = await ctx.db
+          .select()
+          .from(segments)
+          .where(
+            and(
+              gte(segments.latStart, input.sw[0]), // lat >= sw.lat
+              sql`${segments.latStart} <= ${input.ne[0]}`, // lat <= ne.lat
+              gte(segments.lonStart, input.sw[1]), // lng >= sw.lng  
+              sql`${segments.lonStart} <= ${input.ne[1]}`, // lng <= ne.lng
+              gte(segments.createdAt, sevenDaysAgo) // created within last 7 days
+            )
+          );
+        
+        const dbSearchDuration = Date.now() - dbSearchStart;
+
+        console.log(`[STRAVA_SEGMENT_DB_SEARCH]`, {
+          userId: userId ?? "anonymous",
+          isAuthenticated,
+          cacheKey,
+          duration: `${dbSearchDuration}ms`,
+          dbSegmentCount: dbSegments.length,
+          sevenDaysAgo: sevenDaysAgo.toISOString(),
+          boundsQuery: {
+            latRange: [input.sw[0], input.ne[0]],
+            lngRange: [input.sw[1], input.ne[1]]
+          },
+          timestamp: new Date().toISOString(),
+        });
+
+        // If we have recent segments in our database, use them (works for anonymous users)
+        if (dbSegments.length > 0) {
+          const dbSegmentDTOs: SegmentDTO[] = dbSegments.map((segment) => ({
+            id: segment.id.toString(),
+            name: segment.name,
+            distance: segment.distance,
+            averageGrade: segment.averageGrade,
+            latStart: segment.latStart,
+            lonStart: segment.lonStart,
+            latEnd: segment.latEnd,
+            lonEnd: segment.lonEnd,
+            polyline: segment.polyline ?? undefined,
+            komTime: segment.komTime ?? undefined,
+            climbCategory: segment.climbCategory ?? undefined,
+            elevationGain: segment.elevationGain ?? 0,
+            ascentM: segment.ascentM ?? 0,
+            descentM: segment.descentM ?? 0,
+          }));
+
+          // Store in memory cache as well
+          segmentExploreCache.set(cacheKey, dbSegmentDTOs);
+
+          const totalDuration = Date.now() - startTime;
+
+          console.log(`[STRAVA_SEGMENT_EXPLORE_DB_SUCCESS]`, {
+            userId: userId ?? "anonymous",
+            isAuthenticated,
+            cacheKey,
+            segmentCount: dbSegmentDTOs.length,
+            dbSearchDuration: `${dbSearchDuration}ms`,
+            totalDuration: `${totalDuration}ms`,
+            source: "database",
+            cacheStored: true,
+            timestamp: new Date().toISOString(),
+          });
+
+          return dbSegmentDTOs;
+        }
+
+        // If no recent segments in database, require authentication to fetch from Strava API
+        if (!isAuthenticated) {
+          console.log(`[STRAVA_SEGMENT_EXPLORE_ANONYMOUS_FALLBACK]`, {
+            userId: "anonymous",
+            cacheKey,
+            message: "No cached segments available, authentication required for fresh data",
+            timestamp: new Date().toISOString(),
+          });
+
+          // Return empty array for anonymous users when no cached data is available
+          // The frontend will handle this gracefully and show appropriate messaging
+          return [];
+        }
+
+        // For authenticated users: get Strava credentials and fetch from API
         const dbStart = Date.now();
         const stravaAccount = await ctx.db.query.accounts.findFirst({
           where: eq(accounts.userId, userId),
@@ -139,78 +231,7 @@ export const stravaRouter = createTRPCRouter({
           },
         );
 
-        // First, try to get segments from our database within the bounds
-        const dbSearchStart = Date.now();
-        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-        
-        // Query segments within bounds that are less than 7 days old
-        const dbSegments = await ctx.db
-          .select()
-          .from(segments)
-          .where(
-            and(
-              gte(segments.latStart, input.sw[0]), // lat >= sw.lat
-              sql`${segments.latStart} <= ${input.ne[0]}`, // lat <= ne.lat
-              gte(segments.lonStart, input.sw[1]), // lng >= sw.lng  
-              sql`${segments.lonStart} <= ${input.ne[1]}`, // lng <= ne.lng
-              gte(segments.createdAt, sevenDaysAgo) // created within last 7 days
-            )
-          );
-        
-        const dbSearchDuration = Date.now() - dbSearchStart;
-
-        console.log(`[STRAVA_SEGMENT_DB_SEARCH]`, {
-          userId,
-          cacheKey,
-          duration: `${dbSearchDuration}ms`,
-          dbSegmentCount: dbSegments.length,
-          sevenDaysAgo: sevenDaysAgo.toISOString(),
-          boundsQuery: {
-            latRange: [input.sw[0], input.ne[0]],
-            lngRange: [input.sw[1], input.ne[1]]
-          },
-          timestamp: new Date().toISOString(),
-        });
-
-        // If we have recent segments in our database, use them
-        if (dbSegments.length > 0) {
-          const dbSegmentDTOs: SegmentDTO[] = dbSegments.map((segment) => ({
-            id: segment.id.toString(),
-            name: segment.name,
-            distance: segment.distance,
-            averageGrade: segment.averageGrade,
-            latStart: segment.latStart,
-            lonStart: segment.lonStart,
-            latEnd: segment.latEnd,
-            lonEnd: segment.lonEnd,
-            polyline: segment.polyline ?? undefined,
-            komTime: segment.komTime ?? undefined,
-            climbCategory: segment.climbCategory ?? undefined,
-            elevationGain: segment.elevationGain ?? 0,
-            ascentM: segment.ascentM ?? 0,
-            descentM: segment.descentM ?? 0,
-          }));
-
-          // Store in memory cache as well
-          segmentExploreCache.set(cacheKey, dbSegmentDTOs);
-
-          const totalDuration = Date.now() - startTime;
-
-          console.log(`[STRAVA_SEGMENT_EXPLORE_DB_SUCCESS]`, {
-            userId,
-            cacheKey,
-            segmentCount: dbSegmentDTOs.length,
-            dbSearchDuration: `${dbSearchDuration}ms`,
-            totalDuration: `${totalDuration}ms`,
-            source: "database",
-            cacheStored: true,
-            timestamp: new Date().toISOString(),
-          });
-
-          return dbSegmentDTOs;
-        }
-
-        // If no recent segments in database, fetch from Strava API
+        // Fetch fresh segments from Strava API
         console.log(`[STRAVA_SEGMENT_FETCH_FROM_API]`, {
           userId,
           cacheKey,
@@ -225,7 +246,7 @@ export const stravaRouter = createTRPCRouter({
         );
         const apiDuration = Date.now() - apiStart;
 
-        // Save segments to database for future use
+        // Save segments to database for future use (both authenticated and anonymous users)
         if (stravaSegments.length > 0) {
           const dbSaveStart = Date.now();
           
@@ -310,7 +331,8 @@ export const stravaRouter = createTRPCRouter({
         const duration = Date.now() - startTime;
 
         console.error(`[STRAVA_SEGMENT_EXPLORE_ERROR]`, {
-          userId,
+          userId: userId ?? "anonymous",
+          isAuthenticated,
           cacheKey,
           duration: `${duration}ms`,
           error: error instanceof Error ? error.message : "Unknown error",
@@ -322,7 +344,7 @@ export const stravaRouter = createTRPCRouter({
         // Handle rate limiting specifically
         if (error instanceof TRPCError && error.code === "TOO_MANY_REQUESTS") {
           console.warn(`[STRAVA_RATE_LIMIT]`, {
-            userId,
+            userId: userId ?? "anonymous",
             cacheKey,
             retryAfter: (error.cause as { retryAfter?: number })?.retryAfter,
             message: "Strava rate limit exceeded",
