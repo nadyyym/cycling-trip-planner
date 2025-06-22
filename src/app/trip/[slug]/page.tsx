@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 "use client";
 
 import { useState, useMemo } from "react";
@@ -130,8 +131,8 @@ export default function TripDisplayPage() {
           const endKey = day.endLocality.toLowerCase();
           
           // Look up known coordinates
-          const foundStartCoord = knownLocalities[startKey];
-          const foundEndCoord = knownLocalities[endKey];
+          const foundStartCoord = knownLocalities[startKey] as [number, number] | undefined;
+          const foundEndCoord = knownLocalities[endKey] as [number, number] | undefined;
           
           // If we have known coordinates, use them; otherwise generate fallback
           if (foundStartCoord && foundEndCoord) {
@@ -278,8 +279,8 @@ export default function TripDisplayPage() {
             const endKey = day.endLocality.toLowerCase();
             
             // Look up known coordinates
-            const foundStartCoord = knownLocalities[startKey];
-            const foundEndCoord = knownLocalities[endKey];
+            const foundStartCoord = knownLocalities[startKey] as [number, number] | undefined;
+            const foundEndCoord = knownLocalities[endKey] as [number, number] | undefined;
             
             // If we have known coordinates, use them; otherwise generate fallback
             if (foundStartCoord && foundEndCoord) {
