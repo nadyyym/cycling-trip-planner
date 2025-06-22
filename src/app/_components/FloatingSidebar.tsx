@@ -1,6 +1,6 @@
 "use client";
 
-import * as React from "react";
+import { useState, useContext, createContext, useCallback, useMemo } from "react";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "~/lib/utils";
 
@@ -23,7 +23,7 @@ export function FloatingSidebar({
   position = "left",
   width = 320,
 }: FloatingSidebarProps) {
-  const [isCollapsed, setIsCollapsed] = React.useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   if (!isOpen) return null;
 
@@ -109,20 +109,20 @@ interface SidebarContextType {
   closeSidebar: () => void;
 }
 
-const SidebarContext = React.createContext<SidebarContextType | null>(null);
+const SidebarContext = createContext<SidebarContextType | null>(null);
 
 export function SidebarProvider({ children }: { children: React.ReactNode }) {
-  const [isOpen, setIsOpen] = React.useState(false);
-  const [content, setContent] = React.useState<React.ReactNode>(null);
-  const [title, setTitle] = React.useState<string | undefined>();
+  const [isOpen, setIsOpen] = useState(false);
+  const [content, setContent] = useState<React.ReactNode>(null);
+  const [title, setTitle] = useState<string | undefined>();
 
-  const openSidebar = React.useCallback((newContent: React.ReactNode, newTitle?: string) => {
+  const openSidebar = useCallback((newContent: React.ReactNode, newTitle?: string) => {
     setContent(newContent);
     setTitle(newTitle);
     setIsOpen(true);
   }, []);
 
-  const closeSidebar = React.useCallback(() => {
+  const closeSidebar = useCallback(() => {
     setIsOpen(false);
     // Clear content after animation
     setTimeout(() => {
@@ -131,7 +131,7 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
     }, 300);
   }, []);
 
-  const contextValue = React.useMemo(
+  const contextValue = useMemo(
     () => ({
       isOpen,
       content,
@@ -157,7 +157,7 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function useSidebar() {
-  const context = React.useContext(SidebarContext);
+  const context = useContext(SidebarContext);
   if (!context) {
     throw new Error("useSidebar must be used within a SidebarProvider");
   }

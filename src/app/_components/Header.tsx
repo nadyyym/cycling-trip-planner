@@ -1,17 +1,6 @@
 "use client";
 
-/*
-  Shared Header component – displayed on every app page.
-  - Fixed height (h-14) and high z-index so it floats over map.
-  - Lightweight translucent background with backdrop blur for map visibility.
-  - Includes: logo (home), primary nav links, auth avatar/sign-in button.
-  - Highlights active route for consistency across pages.
-  - Uses Tailwind CSS and lucide-react icons already present in the project.
-
-  NOTE: Add <Header/> to a RootLayout that wraps dashboard pages to enable unified navigation.
-*/
-
-import * as React from "react";
+import { useState } from "react";
 import { Bike, Menu, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -30,7 +19,7 @@ const NAV_LINKS = [
 export function Header() {
   const pathname = usePathname();
   const { data: session, status } = useSession();
-  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const isLoadingSession = status === "loading";
 
   // Check if current path matches nav link
