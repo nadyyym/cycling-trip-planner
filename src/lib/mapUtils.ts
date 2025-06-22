@@ -231,3 +231,40 @@ export function getSegmentCenter(segment: SegmentDTO): [number, number] {
 
   return [centerLng, centerLat];
 }
+
+/**
+ * Day colors for multi-day trip visualization
+ * Consistent colors used across map routes and UI components
+ */
+export const DAY_COLORS = {
+  1: { hex: "#6366f1", name: "Blue", bgClass: "bg-blue-50", borderClass: "border-blue-200", textClass: "text-blue-600" },
+  2: { hex: "#10b981", name: "Green", bgClass: "bg-green-50", borderClass: "border-green-200", textClass: "text-green-600" },
+  3: { hex: "#f97316", name: "Orange", bgClass: "bg-orange-50", borderClass: "border-orange-200", textClass: "text-orange-600" },
+  4: { hex: "#ec4899", name: "Pink", bgClass: "bg-pink-50", borderClass: "border-pink-200", textClass: "text-pink-600" },
+} as const;
+
+/**
+ * Get color configuration for a specific day
+ * @param dayNumber Day number (1-4)
+ * @returns Color configuration object
+ */
+export function getDayColor(dayNumber: number) {
+  return DAY_COLORS[dayNumber as keyof typeof DAY_COLORS] ?? DAY_COLORS[1];
+}
+
+/**
+ * Get hex color for a specific day
+ * @param dayNumber Day number (1-4)  
+ * @returns Hex color string
+ */
+export function getDayColorHex(dayNumber: number): string {
+  return getDayColor(dayNumber).hex;
+}
+
+/**
+ * Get all day colors as an array for compatibility with existing code
+ * @returns Array of hex color strings
+ */
+export function getDayColorsArray(): string[] {
+  return [DAY_COLORS[1].hex, DAY_COLORS[2].hex, DAY_COLORS[3].hex, DAY_COLORS[4].hex];
+}

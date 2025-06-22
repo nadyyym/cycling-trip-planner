@@ -8,7 +8,7 @@ import type { CostMatrix } from "~/server/integrations/mapbox";
  */
 export const DAILY_CONSTRAINTS = {
   /** Minimum distance per day in kilometers */
-  MIN_DISTANCE_KM: 40,
+  MIN_DISTANCE_KM: 0,
   /** Maximum distance per day in kilometers */
   MAX_DISTANCE_KM: 100,
   /** Maximum elevation gain per day in meters */
@@ -246,16 +246,7 @@ function partitionRouteSimplified(
     });
   }
 
-  // Validate that all days meet minimum distance requirement
-  for (const partition of partitions) {
-    if (partition.distanceKm < DAILY_CONSTRAINTS.MIN_DISTANCE_KM) {
-      return {
-        success: false,
-        errorCode: "dailyLimitExceeded",
-        errorDetails: `Day ${partition.dayNumber} has only ${Math.round(partition.distanceKm)}km, below minimum of ${DAILY_CONSTRAINTS.MIN_DISTANCE_KM}km`,
-      };
-    }
-  }
+  // Note: Minimum distance constraint removed - allowing days with any distance (including 0km)
 
   const partitionDuration = Date.now() - Date.now();
   const totalDistanceKm = partitions.reduce((sum, p) => sum + p.distanceKm, 0);

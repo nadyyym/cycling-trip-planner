@@ -24,6 +24,8 @@ export interface StitchedGeometry {
   totalDistance: number;
   /** Total elevation gain in meters */
   totalElevationGain: number;
+  /** Coordinate range for each segment [startIndex, endIndex] */
+  segmentCoordinateRanges: [number, number][];
 }
 
 /**
@@ -53,6 +55,7 @@ export async function stitchRouteGeometry(
   // Arrays to store cumulative values
   const cumulativeDistances: number[] = [];
   const cumulativeElevationGains: number[] = [];
+  const segmentCoordinateRanges: [number, number][] = [];
 
   // Array to store all coordinate segments for final geometry
   const allCoordinates: [number, number][] = [];
@@ -89,6 +92,9 @@ export async function stitchRouteGeometry(
       segmentName: segmentMeta.name,
       direction: segment.forwardDirection ? "forward" : "reverse",
     });
+
+    // Track starting coordinate index for this segment
+    const segmentStartIndex = allCoordinates.length;
 
     // Get transfer route geometry if not the first segment (or if we have trip start)
     let transferGeometry: [number, number][] = [];
@@ -204,6 +210,10 @@ export async function stitchRouteGeometry(
       allCoordinates.push(...segmentCoordinates);
     }
 
+    // Track ending coordinate index for this segment
+    const segmentEndIndex = allCoordinates.length - 1;
+    segmentCoordinateRanges.push([segmentStartIndex, segmentEndIndex]);
+
     // Update cumulative values
     totalDistance += transferDistance + segmentMeta.distance;
     totalElevationGain += transferElevationGain + segmentMeta.elevationGain;
@@ -222,6 +232,7 @@ export async function stitchRouteGeometry(
       cumulativeDistance: totalDistance,
       cumulativeElevationGain: totalElevationGain,
       coordinateCount: allCoordinates.length,
+      coordinateRange: [segmentStartIndex, segmentEndIndex],
     });
   }
 
@@ -234,6 +245,7 @@ export async function stitchRouteGeometry(
     totalElevationGain: totalElevationGain,
     totalCoordinates: allCoordinates.length,
     cumulativePoints: cumulativeDistances.length,
+    segmentRanges: segmentCoordinateRanges,
     avgDistancePerSegment: Math.round(
       totalDistance / tspSolution.orderedSegments.length,
     ),
@@ -250,6 +262,7 @@ export async function stitchRouteGeometry(
     },
     cumulativeDistances,
     cumulativeElevationGains,
+    segmentCoordinateRanges,
     totalDistance,
     totalElevationGain,
   };
@@ -257,7 +270,7 @@ export async function stitchRouteGeometry(
 
 /**
  * Extract geometry for a specific day's route from the stitched geometry
- * Uses cumulative arrays to determine the exact geometry for a day's segments
+ * Uses segment coordinate ranges to determine the exact geometry for a day's segments
  *
  * @param stitchedGeometry Complete stitched route geometry
  * @param segmentIndices Indices of segments for this day (from daily partitioner)
@@ -274,6 +287,7 @@ export function extractDayGeometry(
     daySegmentCount: segmentIndices.length,
     segmentIndices: segmentIndices,
     totalCoordinates: stitchedGeometry.geometry.coordinates.length,
+    availableRanges: stitchedGeometry.segmentCoordinateRanges.length,
   });
 
   if (segmentIndices.length === 0) {
@@ -283,22 +297,35 @@ export function extractDayGeometry(
     };
   }
 
-  // For simplicity, we'll return the coordinates between the first and last segment
-  // In a more sophisticated implementation, you'd track coordinate indices for each segment
-  const firstIndex = Math.min(...segmentIndices);
-  const lastIndex = Math.max(...segmentIndices);
+  // Find the coordinate range that spans all segments for this day
+  const firstSegmentIndex = Math.min(...segmentIndices);
+  const lastSegmentIndex = Math.max(...segmentIndices);
 
-  // Use the full geometry as a simplified approach
-  // In production, you'd want to track coordinate ranges for each segment
+  // Get the start coordinate index from the first segment
+  const startCoordIndex = stitchedGeometry.segmentCoordinateRanges[firstSegmentIndex]?.[0] ?? 0;
+  
+  // Get the end coordinate index from the last segment  
+  const endCoordIndex = stitchedGeometry.segmentCoordinateRanges[lastSegmentIndex]?.[1] ?? 
+                       stitchedGeometry.geometry.coordinates.length - 1;
+
+  // Extract the day-specific coordinates
+  const dayCoordinates = stitchedGeometry.geometry.coordinates.slice(
+    startCoordIndex, 
+    endCoordIndex + 1
+  );
+
   const dayGeometry = {
     type: "LineString" as const,
-    coordinates: stitchedGeometry.geometry.coordinates,
+    coordinates: dayCoordinates,
   };
 
   console.log(`[GEOMETRY_EXTRACT_DAY_COMPLETE]`, {
-    firstSegmentIndex: firstIndex,
-    lastSegmentIndex: lastIndex,
+    firstSegmentIndex,
+    lastSegmentIndex,
+    startCoordIndex,
+    endCoordIndex,
     extractedCoordinates: dayGeometry.coordinates.length,
+    totalCoordinates: stitchedGeometry.geometry.coordinates.length,
   });
 
   return dayGeometry;

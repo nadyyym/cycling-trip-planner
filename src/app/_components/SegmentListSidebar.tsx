@@ -3,8 +3,8 @@
 import { useSegmentStore } from "~/app/_hooks/useSegmentStore";
 import { type SegmentDTO } from "~/server/integrations/strava";
 import { api } from "~/trpc/react";
-import { useEffect, useState } from "react";
-import { TripPlanModal, type SelectedSegment } from "./TripPlanModal";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 interface SegmentListSidebarProps {
   segments: SegmentDTO[];
@@ -34,8 +34,8 @@ export function SegmentListSidebar({
     zoomToSegment,
   } = useSegmentStore();
 
-  // Trip planning modal state
-  const [isTripPlanModalOpen, setIsTripPlanModalOpen] = useState(false);
+  // Router for navigation
+  const router = useRouter();
 
   // Get favourites to check which segments are already favourited
   const { data: favourites = [] } = api.favourite.getMyFavourites.useQuery();
@@ -167,23 +167,16 @@ export function SegmentListSidebar({
   };
 
   const handlePlanTrip = () => {
+    const selectedSegmentIds_array = Array.from(selectedSegmentIds);
     console.log("[PLAN_TRIP_BUTTON_CLICKED]", {
       selectedSegmentCount: selectedSegmentIds.size,
-      segmentIds: Array.from(selectedSegmentIds),
+      segmentIds: selectedSegmentIds_array,
       timestamp: new Date().toISOString(),
     });
 
-    setIsTripPlanModalOpen(true);
-  };
-
-  // Get selected segments for trip planning
-  const getSelectedSegmentsForTrip = (): SelectedSegment[] => {
-    return segments
-      .filter((segment) => selectedSegmentIds.has(segment.id))
-      .map((segment) => ({
-        id: segment.id,
-        name: segment.name,
-      }));
+    // Navigate to new-trip page with selected segment IDs as URL parameters
+    const segmentParams = selectedSegmentIds_array.join(',');
+    router.push(`/new-trip?segments=${segmentParams}`);
   };
 
   return (
@@ -446,13 +439,6 @@ export function SegmentListSidebar({
           )}
         </div>
       </div>
-      
-      {/* Trip planning modal */}
-      <TripPlanModal
-        open={isTripPlanModalOpen}
-        onOpenChange={setIsTripPlanModalOpen}
-        selectedSegments={getSelectedSegmentsForTrip()}
-      />
     </div>
   );
 }

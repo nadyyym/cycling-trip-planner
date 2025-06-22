@@ -26,6 +26,7 @@ import {
   DialogTrigger,
 } from "~/components/ui/dialog";
 import { AutocompleteInput } from "../_components/AutocompleteInput";
+import { getDayColorsArray } from "~/lib/mapUtils";
 
 // Mapbox access token
 mapboxgl.accessToken = env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
@@ -458,8 +459,8 @@ export default function ExplorePage() {
   useEffect(() => {
     if (!map.current?.isStyleLoaded()) return;
 
-    // Define colors for different days
-    const dayColors = ["#6366f1", "#10b981", "#f97316", "#ec4899"]; // Blue, Green, Orange, Pink
+    // Define colors for different days using centralized colors
+    const dayColors = getDayColorsArray(); // ["#6366f1", "#10b981", "#f97316", "#ec4899"]
 
     // Remove existing trip route layers and sources
     try {

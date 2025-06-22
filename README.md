@@ -191,7 +191,7 @@ The route planner takes a set of Strava segments and creates optimized multi-day
 - **Smart Segment Ordering**: Uses TSP algorithms to minimize transfer distances between segments
 - **Realistic Route Geometry**: Stitches together actual cycling routes using Mapbox Directions API
 - **Elevation-Aware Planning**: Incorporates real elevation data for accurate difficulty assessment
-- **Daily Constraints**: Ensures each day is 40-100km with ≤1000m elevation gain
+- **Daily Constraints**: Ensures each day is 0-100km with ≤1000m elevation gain
 - **Multi-Day Optimization**: Distributes segments across up to 4 days for balanced trips
 
 **API Endpoint**: `POST /api/trpc/routePlanner.planTrip`
@@ -249,20 +249,28 @@ The trip planning feature allows users to create multi-day cycling itineraries f
 
 **User Workflow**:
 1. **Segment Selection**: Select multiple segments on the `/explore` page using checkboxes
-2. **Trip Planning**: Click "🚴 Plan trip" button to open the trip planning modal
+2. **Trip Planning**: Click "🚴 Plan trip" button to navigate to the dedicated trip planning page
 3. **Route Generation**: System automatically:
    - Optimizes segment visiting order using TSP algorithms
    - Creates realistic route geometry between segments
-   - Partitions route into balanced daily stages (40-100km, ≤1000m elevation)
+   - Partitions route into balanced daily stages (0-100km, ≤1000m elevation)
    - Generates up to 4-day itineraries
-4. **Results Display**: View detailed Markdown itinerary with:
-   - Day-by-day breakdown with distance, elevation, and duration
-   - Segment list with direct Strava links
+4. **Results Display**: View results on dedicated `/new-trip` page with:
+   - Route-focused sidebar showing daily breakdowns
+   - Day-by-day cards with distance, elevation, and segment previews
+   - Expandable detailed Markdown itinerary with Strava links
    - Copy-to-clipboard functionality for sharing
-5. **Map Visualization**: Planned routes automatically display on map with:
-   - Color-coded daily routes (Blue, Green, Orange, Pink)
+5. **Map Visualization**: Planned routes display on full-screen map with:
+   - **Enhanced Color-Coded Daily Routes**: Each day gets a distinct color for easy identification
+     - Day 1: Blue (#6366f1)
+     - Day 2: Green (#10b981) 
+     - Day 3: Orange (#f97316)
+     - Day 4: Pink (#ec4899)
+   - **Color Legend**: Clear visual guide showing day-color mapping
+   - **Enhanced Tooltips**: Hover tooltips with color indicators and highlighted distance
+   - **Color-Coordinated Markers**: Start/end markers match their respective route colors
    - Trip start marker
-   - Automatic zoom to trip area
+   - Map automatically centers on trip area
 
 **Example API Request**:
 ```bash
@@ -397,8 +405,14 @@ Test the route planning functionality:
 # Start the development server
 npm run dev
 
-# In another terminal, test the route planner
+# In another terminal, test the route planner API
 ./examples/test-route-planner-geometry.sh
+
+# Test the enhanced day colors feature
+./examples/test-route-colors.sh
+
+# Test the new trip planning page by visiting:
+# http://localhost:3000/new-trip?segments=229781,1073806
 ```
 
 The test script verifies:
@@ -406,6 +420,13 @@ The test script verifies:
 - Geometry stitching (routes have >2 coordinates)
 - Elevation and distance calculations
 - Multi-day itinerary generation
+
+The new trip planning page (`/new-trip`) provides:
+- URL-based segment selection via `?segments=id1,id2,id3` parameter
+- Full-screen map visualization with color-coded daily routes
+- Interactive sidebar with daily route breakdowns
+- Hover tooltips for route details on map
+- Expandable Markdown itinerary with copy functionality
 
 ### Testing Address Autocomplete
 
@@ -538,7 +559,7 @@ npm run cron:start
 
 - **Commit 6-P**: Daily partitioning algorithm ✅
   - Dynamic programming approach for optimal day partitioning
-  - Enforces constraints: 40-100km distance, ≤1000m elevation per day
+  - Enforces constraints: 0-100km distance, ≤1000m elevation per day
   - Maximum 4 days per trip with balanced distribution
   - Uses accurate geometry-stitched distance and elevation data
   - Detailed constraint violation reporting and error handling
@@ -584,6 +605,21 @@ npm run cron:start
   - Enhanced error messages with user-friendly descriptions and solutions
   - Improved Markdown error display with structured problem/solution format
   - Added comprehensive error mapping for all planner error types
+- **Commit 7-T**: Dedicated trip planning page ✅
+  - Created `/new-trip` page with full-screen map and route-focused sidebar
+  - Built `RouteListSidebar` component for displaying daily route breakdowns
+  - Updated trip planning flow to navigate to dedicated page instead of modal
+  - Added URL-based segment parameters for direct trip planning links
+  - Implemented route hover tooltips and interactive map visualization
+  - Enhanced user experience with dedicated trip planning interface
+- **Enhanced Day Colors Feature**: Improved visual distinction of daily routes ✅
+  - **Centralized Color System**: Consistent day colors across all components
+  - **Color Legend**: Clear visual guide showing day-color mapping in sidebar
+  - **Enhanced Map Tooltips**: Color indicators and highlighted distance display
+  - **Color-Coordinated UI**: Route cards with matching background colors
+  - **Enhanced Distance Visibility**: Day-specific color highlighting for distances
+  - **Consistent Styling**: Unified color scheme across map routes and UI elements
+  - **Technical Implementation**: Centralized `DAY_COLORS` constant with utilities
 
 ### 🚧 Frontend Integration
 - **Commit 7-T**: QA, Analytics & Docs
