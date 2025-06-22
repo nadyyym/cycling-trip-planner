@@ -7,8 +7,13 @@ A smart cycling trip planner that helps you discover amazing cycling segments an
 Plan epic cycling trips by:
 - 🗺️ Discovering cycling segments through map exploration or city search
 - 🎯 Selecting your favorite segments from Strava's database
-- 📅 Building multi-day itineraries with half-day cycling routes (≤7 hours)
+- 📅 Building multi-day itineraries with custom constraints and easier day rules
+- ⚙️ Customizing trip duration, daily distance/elevation limits, and recovery days
 - 🏨 Finding accommodations and transportation (coming soon)
+
+## Upcoming: Custom Trip Constraints
+
+Enhanced trip planning with personalized constraints for safer and more enjoyable cycling adventures.
 
 ## Tech Stack
 

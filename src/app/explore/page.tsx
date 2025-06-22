@@ -26,7 +26,10 @@ import {
   DialogTrigger,
 } from "~/components/ui/dialog";
 import { AutocompleteInput } from "../_components/AutocompleteInput";
+import { TripConstraintsControls } from "../_components/TripConstraintsControls";
 import { getDayColorsArray } from "~/lib/mapUtils";
+import { useRouter } from "next/navigation";
+import { useTripConstraintStore } from "~/app/_hooks/useTripConstraintStore";
 
 // Mapbox access token
 mapboxgl.accessToken = env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
@@ -121,7 +124,13 @@ export default function ExplorePage() {
   const { isRateLimited: isSegmentRateLimited } = useRateLimitHandler();
 
   // Segment store for selection and highlighting
-  const { highlightedSegmentId, highlightSegment } = useSegmentStore();
+  const { highlightedSegmentId, selectedSegmentIds, highlightSegment } = useSegmentStore();
+
+  // Router for navigation
+  const router = useRouter();
+
+  // Trip constraints store
+  const { constraints } = useTripConstraintStore();
 
   // Trip route store for displaying planned routes
   const { currentTrip, routesVisible } = useTripRouteStore();
@@ -677,6 +686,20 @@ export default function ExplorePage() {
     setSearchValue("");
   };
 
+  const handlePlanTrip = () => {
+    const selectedSegmentIds_array = Array.from(selectedSegmentIds);
+    console.log("[EXPLORE_PLAN_TRIP]", {
+      selectedSegmentCount: selectedSegmentIds.size,
+      segmentIds: selectedSegmentIds_array,
+      constraints,
+      timestamp: new Date().toISOString(),
+    });
+
+    // Navigate to new-trip page with selected segment IDs as URL parameters
+    const segmentParams = selectedSegmentIds_array.join(',');
+    router.push(`/new-trip?segments=${segmentParams}`);
+  };
+
   return (
     <div className="flex h-screen flex-col">
       {/* Header with Favourites */}
@@ -715,41 +738,47 @@ export default function ExplorePage() {
         </div>
       </header>
 
-      {/* Main content */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar - simplified without tabs */}
-        <div className="flex w-80 flex-col overflow-hidden border-r bg-white">
-          {/* Search section */}
-          <div className="flex-shrink-0 border-b p-4">
-            {/* ==== AUTOCOMPLETE SEARCH (Enhanced) ====  */}
-            {/* Real-time address suggestions with Mapbox geocoding */}
-            {/* Replaces basic search with autocomplete functionality */}
-            {/* =================================================== */}
-            <AutocompleteInput
-              value={searchValue}
-              onChange={setSearchValue}
-              onSelect={handleSuggestionSelect}
-              placeholder={
-                locationPermission === "granted"
-                  ? "Enter city or address..."
-                  : "Enter city or use your current location..."
-              }
-              showSearchButton={true}
-              onSearchClick={() => void handleSearch()}
-              searchButtonText="Search"
-            />
+      {/* Trip Planning Controls Bar */}
+      <div className="border-b bg-gray-50 px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            {/* Search */}
+            <div className="w-80">
+              <AutocompleteInput
+                value={searchValue}
+                onChange={setSearchValue}
+                onSelect={handleSuggestionSelect}
+                placeholder={
+                  locationPermission === "granted"
+                    ? "Enter city or address..."
+                    : "Enter city or use your current location..."
+                }
+                showSearchButton={false}
+              />
+            </div>
           </div>
 
-          {/* Segment list - directly below search without tabs */}
-          <div className="flex-1 overflow-hidden">
-            <SegmentListSidebar
-              segments={segments}
-              isLoading={isLoadingSegments}
-              error={segmentError}
-              debouncedBounds={debouncedBounds}
-              isRateLimited={isSegmentRateLimited}
+          {/* Trip Constraints Controls */}
+          <div className="relative">
+            <TripConstraintsControls
+              selectedSegmentCount={selectedSegmentIds.size}
+              onPlanTrip={handlePlanTrip}
             />
           </div>
+        </div>
+      </div>
+
+      {/* Main content */}
+      <div className="flex flex-1 overflow-hidden relative">
+        {/* Floating Sidebar */}
+        <div className="absolute left-4 top-4 z-10 w-80 max-h-[calc(100vh-200px)] bg-white rounded-lg shadow-lg border overflow-hidden">
+          <SegmentListSidebar
+            segments={segments}
+            isLoading={isLoadingSegments}
+            error={segmentError}
+            debouncedBounds={debouncedBounds}
+            isRateLimited={isSegmentRateLimited}
+          />
         </div>
 
         {/* Map */}

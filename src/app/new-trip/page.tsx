@@ -8,7 +8,8 @@ import { env } from "~/env";
 import { RouteListSidebar } from "../_components/RouteListSidebar";
 import { useTripRouteStore } from "../_hooks/useTripRouteStore";
 import { useTripPlanner } from "../_hooks/useTripPlanner";
-import { ArrowLeft } from "lucide-react";
+import { useTripConstraintStore } from "../_hooks/useTripConstraintStore";
+import { ArrowLeft, Calendar, MapPin, Mountain } from "lucide-react";
 import Link from "next/link";
 import { getDayColorsArray, getDayColorHex } from "~/lib/mapUtils";
 
@@ -33,6 +34,9 @@ function NewTripPageContent() {
   
   // Trip route store for displaying planned routes
   const { currentTrip, routesVisible } = useTripRouteStore();
+  
+  // Trip constraints store
+  const { constraints } = useTripConstraintStore();
   
   // Trip planner hook for planning the trip
   const {
@@ -142,9 +146,16 @@ function NewTripPageContent() {
         timestamp: new Date().toISOString(),
       });
 
-      planTrip({ segmentIds });
+      planTrip({
+        segmentIds,
+        startDate: constraints.startDate,
+        endDate: constraints.endDate,
+        maxDailyDistanceKm: constraints.maxDailyDistanceKm,
+        maxDailyElevationM: constraints.maxDailyElevationM,
+        easierDayRule: constraints.easierDayRule,
+      });
     }
-  }, [segmentIds, isPending, isSuccess, isError, currentTrip, planTrip]);
+  }, [segmentIds, isPending, isSuccess, isError, currentTrip, planTrip, constraints]);
 
   // Update trip route store when planning succeeds and center map
   useEffect(() => {
@@ -456,6 +467,54 @@ function NewTripPageContent() {
       });
     }
   }, [currentTrip, routesVisible]);
+
+  // Show empty state if no segments are provided and no current trip
+  const shouldShowEmptyState = segmentIds.length === 0 && !currentTrip && !isPending;
+
+  if (shouldShowEmptyState) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="mb-6">
+            <div className="mx-auto mb-4 flex h-24 w-24 items-center justify-center rounded-full bg-blue-100">
+              <MapPin className="h-12 w-12 text-blue-600" />
+            </div>
+            <h1 className="mb-2 text-2xl font-semibold text-gray-900">
+              Ready to Plan Your Trip?
+            </h1>
+            <p className="text-gray-600 max-w-md mx-auto">
+              Select cycling segments on the Explore page and set your trip constraints to create a custom multi-day cycling itinerary.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-center gap-8 text-sm text-gray-500">
+              <div className="flex items-center gap-2">
+                <Calendar className="h-4 w-4" />
+                <span>Custom dates</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Mountain className="h-4 w-4" />
+                <span>Daily limits</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <MapPin className="h-4 w-4" />
+                <span>Route optimization</span>
+              </div>
+            </div>
+
+            <Link
+              href="/explore"
+              className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-6 py-3 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Go to Explore
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen">

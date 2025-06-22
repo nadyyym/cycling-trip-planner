@@ -10,6 +10,7 @@ import {
 } from "~/components/ui/dialog";
 import { useTripPlanner, type TripPlanInput } from "~/app/_hooks/useTripPlanner";
 import { useTripRouteStore, type Trip, type TripRoute } from "~/app/_hooks/useTripRouteStore";
+import { useTripConstraintStore } from "~/app/_hooks/useTripConstraintStore";
 import { useToast } from "~/hooks/use-toast";
 
 /**
@@ -88,6 +89,28 @@ function planErrorToMarkdown(data: { ok: false; error: string; details: string }
       lines.push("- Remove one or more segments from your selection");
       lines.push("- Choose segments that are closer together");
       lines.push("- Consider splitting your trip across more days (contact support for 5+ day trips)");
+      break;
+    case "customLimitExceeded":
+      lines.push("## 🚫 Custom Limit Exceeded");
+      lines.push("**Problem:** One or more segments exceed your custom daily limits.");
+      lines.push("");
+      lines.push("**What this means:** The segments you selected are too demanding for your chosen daily distance or elevation limits.");
+      lines.push("");
+      lines.push("**Solutions:**");
+      lines.push("- Increase your daily distance or elevation limits");
+      lines.push("- Remove the most demanding segments from your selection");
+      lines.push("- Choose segments that are more suited to your fitness level");
+      break;
+    case "easyDayViolation":
+      lines.push("## 🛌 Easier Day Rule Violated");
+      lines.push("**Problem:** An easier day would still exceed the reduced limits for recovery days.");
+      lines.push("");
+      lines.push("**What this means:** Even with the easier day rule applied, one day would be too demanding.");
+      lines.push("");
+      lines.push("**Solutions:**");
+      lines.push("- Adjust your easier day limits to be more conservative");
+      lines.push("- Remove segments to reduce the overall trip difficulty");
+      lines.push("- Choose a longer trip duration to spread out the segments");
       break;
     case "needMoreDays":
       lines.push("## 📅 Need More Days");
@@ -205,6 +228,9 @@ export function TripPlanModal({
   // Trip route store for map visualization
   const { setTrip } = useTripRouteStore();
 
+  // Trip constraints store
+  const { constraints } = useTripConstraintStore();
+
   // Toast notifications
   const { toast } = useToast();
 
@@ -219,11 +245,16 @@ export function TripPlanModal({
 
       const input: TripPlanInput = {
         segmentIds: selectedSegments.map(s => s.id),
+        startDate: constraints.startDate,
+        endDate: constraints.endDate,
+        maxDailyDistanceKm: constraints.maxDailyDistanceKm,
+        maxDailyElevationM: constraints.maxDailyElevationM,
+        easierDayRule: constraints.easierDayRule,
       };
 
       planTrip(input);
     }
-  }, [open, selectedSegments, isPending, isSuccess, isError, planTrip]);
+  }, [open, selectedSegments, isPending, isSuccess, isError, planTrip, constraints]);
 
   // Reset state when modal closes
   useEffect(() => {

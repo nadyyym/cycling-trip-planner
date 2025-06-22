@@ -13,15 +13,42 @@ export const SegmentInputSchema = z.object({
 export type SegmentInput = z.infer<typeof SegmentInputSchema>;
 
 /**
- * Request to plan a cycling trip
+ * Easier day rule configuration
+ * Every nth day will have reduced limits to provide recovery
+ */
+export const EasierDayRuleSchema = z.object({
+  /** Apply easier limits every nth day */
+  every: z.number().int().min(2).max(7).default(3),
+  /** Maximum distance in km for easier days */
+  maxDistanceKm: z.number().min(20).max(100).default(60),
+  /** Maximum elevation in meters for easier days */
+  maxElevationM: z.number().min(200).max(2000).default(1000),
+});
+
+export type EasierDayRule = z.infer<typeof EasierDayRuleSchema>;
+
+/**
+ * Request to plan a cycling trip with custom constraints
  */
 export const PlanRequestSchema = z.object({
   /** List of segments that must be visited */
   segments: z.array(SegmentInputSchema).min(1).max(10),
   /** Optional trip start coordinates [longitude, latitude] */
   tripStart: z.tuple([z.number(), z.number()]).optional(),
-  /** Maximum number of days for the trip (1-4) */
-  maxDays: z.number().int().min(1).max(4).default(4),
+  /** Trip start date (ISO yyyy-mm-dd format) */
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  /** Trip end date (ISO yyyy-mm-dd format) */
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  /** Maximum daily distance in kilometers */
+  maxDailyDistanceKm: z.number().min(20).max(300).default(100),
+  /** Maximum daily elevation gain in meters */
+  maxDailyElevationM: z.number().min(200).max(5000).default(1000),
+  /** Easier day rule configuration */
+  easierDayRule: EasierDayRuleSchema.default({
+    every: 3,
+    maxDistanceKm: 60,
+    maxElevationM: 1000,
+  }),
 });
 
 export type PlanRequest = z.infer<typeof PlanRequestSchema>;
@@ -41,30 +68,28 @@ export const SegmentDetailSchema = z.object({
 export type SegmentDetail = z.infer<typeof SegmentDetailSchema>;
 
 /**
- * A single day's route with metadata
+ * A single day's route in the planned trip
  */
 export const DayRouteSchema = z.object({
   /** Day number (1-based) */
   dayNumber: z.number().int().positive(),
-  /** Total distance in kilometers */
-  distanceKm: z.number().positive(),
-  /** Total elevation gain in meters (legacy field for backward compatibility) */
-  elevationGainM: z.number().min(0),
-  /** Total ascent in meters */
-  ascentM: z.number().min(0),
-  /** Total descent in meters */
-  descentM: z.number().min(0),
   /** Route geometry as GeoJSON LineString */
   geometry: z.object({
     type: z.literal("LineString"),
     coordinates: z.array(z.tuple([z.number(), z.number()])),
   }),
-  /** Detailed segment information with names and Strava links */
-  segments: z.array(SegmentDetailSchema),
-  /** @deprecated Use segments array instead. Segments visited on this day (IDs only) */
-  segmentsVisited: z.array(z.number().int().positive()),
-  /** Estimated duration in minutes */
+  /** Total distance for this day in kilometers */
+  distanceKm: z.number().positive(),
+  /** Total elevation gain for this day in meters (legacy field for backward compatibility) */
+  elevationGainM: z.number().min(0),
+  /** Total ascent for this day in meters */
+  ascentM: z.number().min(0),
+  /** Total descent for this day in meters */
+  descentM: z.number().min(0),
+  /** Estimated duration for this day in minutes */
   durationMinutes: z.number().positive(),
+  /** Segments visited on this day */
+  segments: z.array(SegmentDetailSchema),
 });
 
 export type DayRoute = z.infer<typeof DayRouteSchema>;
@@ -74,6 +99,8 @@ export type DayRoute = z.infer<typeof DayRouteSchema>;
  */
 export const PlannerErrorSchema = z.union([
   z.literal("dailyLimitExceeded"),
+  z.literal("customLimitExceeded"),
+  z.literal("easyDayViolation"),
   z.literal("needMoreDays"),
   z.literal("segmentTooFar"),
   z.literal("externalApi"),
@@ -100,6 +127,14 @@ export const PlanResponseSchema = z.discriminatedUnion("ok", [
     totalDescentM: z.number().min(0),
     /** Estimated total duration in minutes */
     totalDurationMinutes: z.number().positive(),
+    /** Applied constraints for this trip */
+    constraints: z.object({
+      startDate: z.string(),
+      endDate: z.string(),
+      maxDailyDistanceKm: z.number(),
+      maxDailyElevationM: z.number(),
+      easierDayRule: EasierDayRuleSchema,
+    }),
   }),
   z.object({
     ok: z.literal(false),

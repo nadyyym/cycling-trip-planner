@@ -4,7 +4,6 @@ import { useSegmentStore } from "~/app/_hooks/useSegmentStore";
 import { type SegmentDTO } from "~/server/integrations/strava";
 import { api } from "~/trpc/react";
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 
 interface SegmentListSidebarProps {
   segments: SegmentDTO[];
@@ -34,8 +33,7 @@ export function SegmentListSidebar({
     zoomToSegment,
   } = useSegmentStore();
 
-  // Router for navigation
-  const router = useRouter();
+
 
   // Get favourites to check which segments are already favourited
   const { data: favourites = [] } = api.favourite.getMyFavourites.useQuery();
@@ -164,18 +162,7 @@ export function SegmentListSidebar({
     addFavouritesMutation.mutate({ segments: segmentsToSave });
   };
 
-  const handlePlanTrip = () => {
-    const selectedSegmentIds_array = Array.from(selectedSegmentIds);
-    console.log("[PLAN_TRIP_BUTTON_CLICKED]", {
-      selectedSegmentCount: selectedSegmentIds.size,
-      segmentIds: selectedSegmentIds_array,
-      timestamp: new Date().toISOString(),
-    });
 
-    // Navigate to new-trip page with selected segment IDs as URL parameters
-    const segmentParams = selectedSegmentIds_array.join(',');
-    router.push(`/new-trip?segments=${segmentParams}`);
-  };
 
   return (
     <div className="w-80 overflow-y-auto border-r bg-white p-4">
@@ -229,25 +216,7 @@ export function SegmentListSidebar({
                   </button>
                 </div>
               </div>
-              
-              {/* Trip planning button */}
-              <div className="mt-3 border-t border-blue-200 pt-3">
-                <button
-                  onClick={handlePlanTrip}
-                  className="w-full rounded-md bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={selectedSegmentIds.size === 0}
-                  title="Plan a multi-day cycling trip with selected segments"
-                  aria-label="Plan trip with selected segments"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      handlePlanTrip();
-                    }
-                  }}
-                >
-                  🚴 Plan trip ({selectedSegmentIds.size} segments)
-                </button>
-              </div>
+
             </div>
           )}
 

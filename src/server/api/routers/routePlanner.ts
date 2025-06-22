@@ -51,6 +51,24 @@ export class SegmentTooFarError extends Error {
   }
 }
 
+export class CustomLimitExceededError extends Error {
+  public readonly plannerErrorType = "customLimitExceeded" as const;
+
+  constructor(details: string) {
+    super(`Custom limit exceeded: ${details}`);
+    this.name = "CustomLimitExceededError";
+  }
+}
+
+export class EasyDayViolationError extends Error {
+  public readonly plannerErrorType = "easyDayViolation" as const;
+
+  constructor(details: string) {
+    super(`Easy day violation: ${details}`);
+    this.name = "EasyDayViolationError";
+  }
+}
+
 export class ExternalApiPlannerError extends Error {
   public readonly plannerErrorType = "externalApi" as const;
 
@@ -79,6 +97,8 @@ function mapErrorToResponse(error: unknown, context: string): PlanResponse {
   // Handle custom planner errors
   if (
     error instanceof DailyLimitExceededError ||
+    error instanceof CustomLimitExceededError ||
+    error instanceof EasyDayViolationError ||
     error instanceof NeedMoreDaysError ||
     error instanceof SegmentTooFarError ||
     error instanceof ExternalApiPlannerError
@@ -192,7 +212,11 @@ export const routePlannerRouter = createTRPCRouter({
       // Log the planning request for debugging
       console.log(`[ROUTE_PLANNER_START]`, {
         segmentCount: input.segments.length,
-        maxDays: input.maxDays,
+        startDate: input.startDate,
+        endDate: input.endDate,
+        maxDailyDistanceKm: input.maxDailyDistanceKm,
+        maxDailyElevationM: input.maxDailyElevationM,
+        easierDayRule: input.easierDayRule,
         hasTripStart: !!input.tripStart,
         segmentIds: input.segments.map((s) => s.segmentId.toString()),
         timestamp: new Date().toISOString(),
@@ -555,10 +579,20 @@ export const routePlannerRouter = createTRPCRouter({
           );
 
           try {
+            // Build trip constraints from input
+            const tripConstraints = {
+              startDate: input.startDate,
+              endDate: input.endDate,
+              maxDailyDistanceKm: input.maxDailyDistanceKm,
+              maxDailyElevationM: input.maxDailyElevationM,
+              easierDayRule: input.easierDayRule,
+            };
+
             const partitionResult = partitionRoute(
               tspSolution,
               segmentMetas,
               matrix,
+              tripConstraints,
               tripStartIndex,
             );
 
@@ -577,6 +611,16 @@ export const routePlannerRouter = createTRPCRouter({
                 throw new DailyLimitExceededError(
                   partitionResult.errorDetails ??
                     "Daily constraints cannot be met",
+                );
+              } else if (partitionResult.errorCode === "customLimitExceeded") {
+                throw new CustomLimitExceededError(
+                  partitionResult.errorDetails ??
+                    "Custom daily limits exceeded",
+                );
+              } else if (partitionResult.errorCode === "easyDayViolation") {
+                throw new EasyDayViolationError(
+                  partitionResult.errorDetails ??
+                    "Easier day constraints violated",
                 );
               } else if (partitionResult.errorCode === "needMoreDays") {
                 throw new NeedMoreDaysError(
@@ -714,7 +758,7 @@ export const routePlannerRouter = createTRPCRouter({
               timestamp: new Date().toISOString(),
             });
 
-            // Return successful planning result
+            // Return successful planning result with applied constraints
             return {
               ok: true,
               routes,
@@ -723,6 +767,7 @@ export const routePlannerRouter = createTRPCRouter({
               totalAscentM,
               totalDescentM,
               totalDurationMinutes,
+              constraints: tripConstraints,
             };
           } catch (partitionError) {
             const step6Duration = Date.now() - step6Start;
