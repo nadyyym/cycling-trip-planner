@@ -135,18 +135,6 @@ export default function ItinerariesPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background">
-        <div className="border-b border-border bg-card">
-          <div className="container mx-auto px-4 py-8">
-            <Link
-              href="/"
-              className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back to home
-            </Link>
-            <h1 className="text-3xl font-bold text-foreground">My Cycling Itineraries</h1>
-          </div>
-        </div>
         <div className="flex h-64 items-center justify-center">
           <div className="text-center">
             <div className="mb-4 h-8 w-8 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600 mx-auto"></div>
@@ -161,18 +149,6 @@ export default function ItinerariesPage() {
   if (error) {
     return (
       <div className="min-h-screen bg-background">
-        <div className="border-b border-border bg-card">
-          <div className="container mx-auto px-4 py-8">
-            <Link
-              href="/"
-              className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back to home
-            </Link>
-            <h1 className="text-3xl font-bold text-foreground">My Cycling Itineraries</h1>
-          </div>
-        </div>
         <div className="flex h-64 items-center justify-center">
           <div className="text-center">
             <div className="mb-4 text-6xl text-red-400">⚠️</div>
@@ -191,59 +167,50 @@ export default function ItinerariesPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="border-b border-border bg-card">
-        <div className="container mx-auto px-4 py-8">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to home
-          </Link>
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-foreground">My Cycling Itineraries</h1>
-              <p className="text-muted-foreground mt-2">
-                Explore your saved cycling adventures and plan new journeys
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant={filter === 'all' ? 'default' : 'outline'}
-                onClick={() => setFilter('all')}
-                size="sm"
-              >
-                All Trips ({trips.length})
-              </Button>
-              <Button
-                variant={filter === 'recent' ? 'default' : 'outline'}
-                onClick={() => setFilter('recent')}
-                size="sm"
-              >
-                Recent ({trips.filter(trip => {
-                  const sixMonthsAgo = new Date();
-                  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-                  return new Date(trip.createdAt) >= sixMonthsAgo;
-                }).length})
-              </Button>
-              <Button
-                variant={filter === 'longer' ? 'default' : 'outline'}
-                onClick={() => setFilter('longer')}
-                size="sm"
-              >
-                Multi-day ({trips.filter(trip => {
-                  const dayCount = Array.isArray(trip.days) ? trip.days.length : 0;
-                  return dayCount >= 3;
-                }).length})
-              </Button>
-            </div>
+      {/* Filter Controls */}
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">My Cycling Itineraries</h1>
+            <p className="text-muted-foreground mt-2">
+              Explore your saved cycling adventures and plan new journeys
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant={filter === 'all' ? 'default' : 'outline'}
+              onClick={() => setFilter('all')}
+              size="sm"
+            >
+              All Trips ({trips.length})
+            </Button>
+            <Button
+              variant={filter === 'recent' ? 'default' : 'outline'}
+              onClick={() => setFilter('recent')}
+              size="sm"
+            >
+              Recent ({trips.filter(trip => {
+                const sixMonthsAgo = new Date();
+                sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+                return new Date(trip.createdAt) >= sixMonthsAgo;
+              }).length})
+            </Button>
+            <Button
+              variant={filter === 'longer' ? 'default' : 'outline'}
+              onClick={() => setFilter('longer')}
+              size="sm"
+            >
+              Multi-day ({trips.filter(trip => {
+                const dayCount = Array.isArray(trip.days) ? trip.days.length : 0;
+                return dayCount >= 3;
+              }).length})
+            </Button>
           </div>
         </div>
       </div>
 
       {/* Trip Cards Grid */}
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 pb-8">
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {filteredTrips.map((trip) => {
             const difficulty = getTripDifficulty(trip.totalDistanceKm, trip.totalElevationM);

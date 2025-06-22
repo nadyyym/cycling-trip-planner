@@ -2,9 +2,12 @@ import "~/styles/globals.css";
 
 import { type Metadata } from "next";
 import { Geist } from "next/font/google";
+import { SessionProvider } from "next-auth/react";
 
 import { TRPCReactProvider } from "~/trpc/react";
 import { Toaster } from "~/components/ui/toaster";
+import { CyclingHeader } from "~/components/ui/cycling-header";
+import { auth } from "~/server/auth";
 
 export const metadata: Metadata = {
   title: "Cycling Trip Planner - Discover & Plan Epic Multi-Day Cycling Adventures",
@@ -35,13 +38,20 @@ const geist = Geist({
   variable: "--font-geist-sans",
 });
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const session = await auth();
+  
   return (
     <html lang="en" className={`${geist.variable}`}>
       <body>
-        <TRPCReactProvider>{children}</TRPCReactProvider>
+        <SessionProvider session={session}>
+          <TRPCReactProvider>
+            <CyclingHeader />
+            {children}
+          </TRPCReactProvider>
+        </SessionProvider>
         <Toaster />
       </body>
     </html>

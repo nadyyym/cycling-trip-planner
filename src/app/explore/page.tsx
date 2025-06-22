@@ -702,41 +702,6 @@ export default function ExplorePage() {
 
   return (
     <div className="flex h-screen flex-col">
-      {/* Header with Favourites */}
-      <header className="border-b bg-white px-4 py-3 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link
-              href="/"
-              className="text-sm text-gray-500 underline hover:text-gray-700"
-            >
-              ← Back to home
-            </Link>
-            <h1 className="text-xl font-semibold text-gray-900">
-              Explore Cycling Segments
-            </h1>
-          </div>
-          <div className="flex items-center gap-4">
-            {/* Favourites section moved to header */}
-            <Link
-              href="/favourites"
-              className="flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 hover:bg-blue-100 transition-colors"
-            >
-              <span className="text-sm font-medium text-blue-900">
-                ⭐ Favourites
-              </span>
-              {favouriteCount && favouriteCount.count > 0 && (
-                <span className="rounded-full bg-blue-500 px-2 py-1 text-xs text-white">
-                  {favouriteCount.count}
-                </span>
-              )}
-            </Link>
-            <div className="text-sm text-gray-500">
-              Lng: {lng} | Lat: {lat} | Zoom: {zoom}
-            </div>
-          </div>
-        </div>
-      </header>
 
       {/* Trip Planning Controls Bar */}
       <div className="border-b bg-gray-50 px-4 py-3">
