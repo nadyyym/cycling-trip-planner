@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import type { EasierDayRule } from "~/types/routePlanner";
 
 /**
  * Trip planning constraints that users can customize
@@ -13,8 +12,6 @@ export interface TripConstraints {
   maxDailyDistanceKm: number;
   /** Maximum daily elevation gain in meters */
   maxDailyElevationM: number;
-  /** Easier day rule configuration */
-  easierDayRule: EasierDayRule;
 }
 
 /**
@@ -32,7 +29,6 @@ export interface TripConstraintStore {
   setEndDate: (date: string) => void;
   setMaxDailyDistance: (km: number) => void;
   setMaxDailyElevation: (meters: number) => void;
-  setEasierDayRule: (rule: EasierDayRule) => void;
   setConstraints: (constraints: Partial<TripConstraints>) => void;
   resetToDefaults: () => void;
   
@@ -49,11 +45,6 @@ const DEFAULT_CONSTRAINTS: TripConstraints = {
   endDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]!, // 4 days from now
   maxDailyDistanceKm: 100,
   maxDailyElevationM: 1000,
-  easierDayRule: {
-    every: 3,
-    maxDistanceKm: 60,
-    maxElevationM: 1000,
-  },
 };
 
 /**
@@ -118,29 +109,6 @@ function validateConstraints(constraints: TripConstraints): string[] {
     errors.push("Maximum daily elevation cannot exceed 5000 m");
   }
   
-  // Easier day rule validation
-  const rule = constraints.easierDayRule;
-  if (rule.every < 2 || rule.every > 7) {
-    errors.push("Easier day frequency must be between 2 and 7 days");
-  }
-  
-  if (rule.maxDistanceKm < 20 || rule.maxDistanceKm > 100) {
-    errors.push("Easier day distance must be between 20 and 100 km");
-  }
-  
-  if (rule.maxElevationM < 200 || rule.maxElevationM > 2000) {
-    errors.push("Easier day elevation must be between 200 and 2000 m");
-  }
-  
-  // Logical validation: easier day limits should be <= regular limits
-  if (rule.maxDistanceKm > constraints.maxDailyDistanceKm) {
-    errors.push("Easier day distance cannot exceed regular daily limit");
-  }
-  
-  if (rule.maxElevationM > constraints.maxDailyElevationM) {
-    errors.push("Easier day elevation cannot exceed regular daily limit");
-  }
-  
   return errors;
 }
 
@@ -200,26 +168,14 @@ export const useTripConstraintStore = create<TripConstraintStore>((set, get) => 
     }));
   },
 
-  setEasierDayRule: (rule: EasierDayRule) => {
-    console.log("[TRIP_CONSTRAINT_SET_EASIER_DAY_RULE]", {
-      rule,
+  setConstraints: (constraints: Partial<TripConstraints>) => {
+    console.log("[TRIP_CONSTRAINT_SET_BULK]", {
+      constraints,
       timestamp: new Date().toISOString(),
     });
 
     set((state) => ({
-      constraints: { ...state.constraints, easierDayRule: rule },
-      isCustomized: true,
-    }));
-  },
-
-  setConstraints: (newConstraints: Partial<TripConstraints>) => {
-    console.log("[TRIP_CONSTRAINT_SET_MULTIPLE]", {
-      newConstraints,
-      timestamp: new Date().toISOString(),
-    });
-
-    set((state) => ({
-      constraints: { ...state.constraints, ...newConstraints },
+      constraints: { ...state.constraints, ...constraints },
       isCustomized: true,
     }));
   },
@@ -236,13 +192,12 @@ export const useTripConstraintStore = create<TripConstraintStore>((set, get) => 
   },
 
   isValid: () => {
-    const { constraints } = get();
-    const errors = validateConstraints(constraints);
-    return errors.length === 0;
+    const state = get();
+    return validateConstraints(state.constraints).length === 0;
   },
 
   getValidationErrors: () => {
-    const { constraints } = get();
-    return validateConstraints(constraints);
+    const state = get();
+    return validateConstraints(state.constraints);
   },
 })); 

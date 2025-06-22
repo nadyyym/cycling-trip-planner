@@ -12,6 +12,7 @@ import {
   PopoverTrigger,
 } from "~/components/ui/popover";
 import { useTripConstraintStore } from "~/app/_hooks/useTripConstraintStore";
+import { MAX_SEGMENTS } from "~/app/_hooks/useSegmentStore";
 import { cn } from "~/lib/utils";
 
 /**
@@ -211,14 +212,14 @@ export function TripConstraintsControls({
         title={
           !isFormValid
             ? selectedSegmentCount === 0
-              ? "Select segments to plan trip"
+              ? `Select segments (max ${MAX_SEGMENTS}) to plan trip`
               : validationErrors.join(", ")
-            : `Plan trip with ${selectedSegmentCount} segments`
+            : `Plan trip with ${selectedSegmentCount} of ${MAX_SEGMENTS} segments`
         }
       >
         🚴 Plan trip
         {selectedSegmentCount > 0 && (
-          <span className="ml-1">({selectedSegmentCount})</span>
+          <span className="ml-1">({selectedSegmentCount}/{MAX_SEGMENTS})</span>
         )}
       </Button>
 

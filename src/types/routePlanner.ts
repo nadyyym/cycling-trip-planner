@@ -13,21 +13,6 @@ export const SegmentInputSchema = z.object({
 export type SegmentInput = z.infer<typeof SegmentInputSchema>;
 
 /**
- * Easier day rule configuration
- * Every nth day will have reduced limits to provide recovery
- */
-export const EasierDayRuleSchema = z.object({
-  /** Apply easier limits every nth day */
-  every: z.number().int().min(2).max(7).default(3),
-  /** Maximum distance in km for easier days */
-  maxDistanceKm: z.number().min(20).max(100).default(60),
-  /** Maximum elevation in meters for easier days */
-  maxElevationM: z.number().min(200).max(2000).default(1000),
-});
-
-export type EasierDayRule = z.infer<typeof EasierDayRuleSchema>;
-
-/**
  * Request to plan a cycling trip with custom constraints
  */
 export const PlanRequestSchema = z.object({
@@ -43,18 +28,12 @@ export const PlanRequestSchema = z.object({
   maxDailyDistanceKm: z.number().min(20).max(300).default(100),
   /** Maximum daily elevation gain in meters */
   maxDailyElevationM: z.number().min(200).max(5000).default(1000),
-  /** Easier day rule configuration */
-  easierDayRule: EasierDayRuleSchema.default({
-    every: 3,
-    maxDistanceKm: 60,
-    maxElevationM: 1000,
-  }),
 });
 
 export type PlanRequest = z.infer<typeof PlanRequestSchema>;
 
 /**
- * Segment details for trip planning output
+ * Detailed segment information in planned routes
  */
 export const SegmentDetailSchema = z.object({
   /** Strava segment ID */
@@ -95,16 +74,14 @@ export const DayRouteSchema = z.object({
 export type DayRoute = z.infer<typeof DayRouteSchema>;
 
 /**
- * Error types for trip planning failures
+ * Planner error types
  */
-export const PlannerErrorSchema = z.union([
-  z.literal("dailyLimitExceeded"),
-  z.literal("customLimitExceeded"),
-  z.literal("easyDayViolation"),
-  z.literal("needMoreDays"),
-  z.literal("segmentTooFar"),
-  z.literal("externalApi"),
-  z.literal("notImplemented"),
+export const PlannerErrorSchema = z.enum([
+  "dailyLimitExceeded",
+  "customLimitExceeded",
+  "needMoreDays",
+  "segmentTooFar",
+  "externalApi",
 ]);
 
 export type PlannerError = z.infer<typeof PlannerErrorSchema>;
@@ -133,7 +110,6 @@ export const PlanResponseSchema = z.discriminatedUnion("ok", [
       endDate: z.string(),
       maxDailyDistanceKm: z.number(),
       maxDailyElevationM: z.number(),
-      easierDayRule: EasierDayRuleSchema,
     }),
   }),
   z.object({

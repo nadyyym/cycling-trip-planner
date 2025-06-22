@@ -60,15 +60,6 @@ export class CustomLimitExceededError extends Error {
   }
 }
 
-export class EasyDayViolationError extends Error {
-  public readonly plannerErrorType = "easyDayViolation" as const;
-
-  constructor(details: string) {
-    super(`Easy day violation: ${details}`);
-    this.name = "EasyDayViolationError";
-  }
-}
-
 export class ExternalApiPlannerError extends Error {
   public readonly plannerErrorType = "externalApi" as const;
 
@@ -98,7 +89,6 @@ function mapErrorToResponse(error: unknown, context: string): PlanResponse {
   if (
     error instanceof DailyLimitExceededError ||
     error instanceof CustomLimitExceededError ||
-    error instanceof EasyDayViolationError ||
     error instanceof NeedMoreDaysError ||
     error instanceof SegmentTooFarError ||
     error instanceof ExternalApiPlannerError
@@ -216,7 +206,6 @@ export const routePlannerRouter = createTRPCRouter({
         endDate: input.endDate,
         maxDailyDistanceKm: input.maxDailyDistanceKm,
         maxDailyElevationM: input.maxDailyElevationM,
-        easierDayRule: input.easierDayRule,
         hasTripStart: !!input.tripStart,
         segmentIds: input.segments.map((s) => s.segmentId.toString()),
         timestamp: new Date().toISOString(),
@@ -585,7 +574,6 @@ export const routePlannerRouter = createTRPCRouter({
               endDate: input.endDate,
               maxDailyDistanceKm: input.maxDailyDistanceKm,
               maxDailyElevationM: input.maxDailyElevationM,
-              easierDayRule: input.easierDayRule,
             };
 
             const partitionResult = partitionRoute(
@@ -616,11 +604,6 @@ export const routePlannerRouter = createTRPCRouter({
                 throw new CustomLimitExceededError(
                   partitionResult.errorDetails ??
                     "Custom daily limits exceeded",
-                );
-              } else if (partitionResult.errorCode === "easyDayViolation") {
-                throw new EasyDayViolationError(
-                  partitionResult.errorDetails ??
-                    "Easier day constraints violated",
                 );
               } else if (partitionResult.errorCode === "needMoreDays") {
                 throw new NeedMoreDaysError(

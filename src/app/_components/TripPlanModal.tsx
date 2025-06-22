@@ -91,48 +91,35 @@ function planErrorToMarkdown(data: { ok: false; error: string; details: string }
       lines.push("- Consider splitting your trip across more days (contact support for 5+ day trips)");
       break;
     case "customLimitExceeded":
-      lines.push("## 🚫 Custom Limit Exceeded");
-      lines.push("**Problem:** One or more segments exceed your custom daily limits.");
-      lines.push("");
-      lines.push("**What this means:** The segments you selected are too demanding for your chosen daily distance or elevation limits.");
-      lines.push("");
+      lines.push("## 🚫 Daily Limit Exceeded");
+      lines.push("**Problem:** One or more segments exceed your daily distance or elevation limits.");
+      
+      lines.push("**What this means:** Even with optimal routing, at least one day would be too demanding.");
+      
       lines.push("**Solutions:**");
       lines.push("- Increase your daily distance or elevation limits");
-      lines.push("- Remove the most demanding segments from your selection");
-      lines.push("- Choose segments that are more suited to your fitness level");
-      break;
-    case "easyDayViolation":
-      lines.push("## 🛌 Easier Day Rule Violated");
-      lines.push("**Problem:** An easier day would still exceed the reduced limits for recovery days.");
-      lines.push("");
-      lines.push("**What this means:** Even with the easier day rule applied, one day would be too demanding.");
-      lines.push("");
-      lines.push("**Solutions:**");
-      lines.push("- Adjust your easier day limits to be more conservative");
-      lines.push("- Remove segments to reduce the overall trip difficulty");
-      lines.push("- Choose a longer trip duration to spread out the segments");
+      lines.push("- Remove some particularly long or steep segments");
+      lines.push("- Split the trip into more days by extending the date range");
       break;
     case "needMoreDays":
       lines.push("## 📅 Need More Days");
       lines.push("**Problem:** The selected segments require more than 4 days to complete safely.");
-      lines.push("");
-      lines.push("**What this means:** Our current trip planner supports up to 4-day cycling adventures.");
-      lines.push("");
+      
+      lines.push("**What this means:** There are too many segments to fit within the maximum 4-day limit.");
+      
       lines.push("**Solutions:**");
-      lines.push("- Remove some segments to fit within 4 days");
-      lines.push("- Choose segments that are closer together");
-      lines.push("- Contact support if you need help planning longer trips");
+      lines.push("- Select fewer segments");
+      lines.push("- Focus on segments in a smaller geographic area");
       break;
     case "segmentTooFar":
       lines.push("## 🗺️ Segments Too Far Apart");
       lines.push("**Problem:** The selected segments are too far apart to route efficiently.");
-      lines.push("");
-      lines.push("**What this means:** The distances between segments would make for impractical daily rides.");
-      lines.push("");
+      
+      lines.push("**What this means:** The travel distance between segments is excessive.");
+      
       lines.push("**Solutions:**");
       lines.push("- Select segments within the same region or area");
-      lines.push("- Remove segments that are outliers from your main route");
-      lines.push("- Consider planning separate trips for different areas");
+      lines.push("- Remove outlying segments that are far from the group");
       break;
     case "externalApi":
       lines.push("## 🔧 External Service Issue");
@@ -249,7 +236,6 @@ export function TripPlanModal({
         endDate: constraints.endDate,
         maxDailyDistanceKm: constraints.maxDailyDistanceKm,
         maxDailyElevationM: constraints.maxDailyElevationM,
-        easierDayRule: constraints.easierDayRule,
       };
 
       planTrip(input);

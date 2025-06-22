@@ -1,9 +1,10 @@
 "use client";
 
-import { useSegmentStore } from "~/app/_hooks/useSegmentStore";
+import { useSegmentStore, MAX_SEGMENTS } from "~/app/_hooks/useSegmentStore";
 import { type SegmentDTO } from "~/server/integrations/strava";
 import { api } from "~/trpc/react";
 import { useEffect } from "react";
+import { useToast } from "~/hooks/use-toast";
 
 interface SegmentListSidebarProps {
   segments: SegmentDTO[];
@@ -31,9 +32,22 @@ export function SegmentListSidebar({
     toggleSegmentSelection,
     clearSelection,
     zoomToSegment,
+    setOnLimitReached,
   } = useSegmentStore();
 
+  // Toast for user notifications
+  const { toast } = useToast();
 
+  // Set up limit reached callback to show toast notifications
+  useEffect(() => {
+    setOnLimitReached((count: number, limit: number) => {
+      toast({
+        title: `⚠️ Selection Limit Reached`,
+        description: `You can only select up to ${limit} segments. Please deselect some segments to add new ones.`,
+        variant: "destructive",
+      });
+    });
+  }, [setOnLimitReached, toast]);
 
   // Get favourites to check which segments are already favourited
   const { data: favourites = [] } = api.favourite.getMyFavourites.useQuery();
@@ -113,7 +127,16 @@ export function SegmentListSidebar({
   const handleCardClick = (segmentId: string) => {
     // Card click now toggles selection (per PRD requirement)
     console.log("[SEGMENT_CARD_CLICK_SELECT]", { segmentId });
-    toggleSegmentSelection(segmentId, "card");
+    const result = toggleSegmentSelection(segmentId, "card");
+    
+    // Log if selection was blocked due to limit
+    if (!result.success) {
+      console.log("[SEGMENT_CARD_CLICK_BLOCKED]", { 
+        segmentId, 
+        reason: result.reason,
+        currentCount: selectedSegmentIds.size 
+      });
+    }
   };
 
   const handleZoomToSegment = (segmentId: string, event: React.MouseEvent) => {
@@ -127,7 +150,16 @@ export function SegmentListSidebar({
   };
 
   const handleCheckboxChange = (segmentId: string) => {
-    toggleSegmentSelection(segmentId, "checkbox");
+    const result = toggleSegmentSelection(segmentId, "checkbox");
+    
+    // Log if selection was blocked due to limit  
+    if (!result.success) {
+      console.log("[SEGMENT_CHECKBOX_BLOCKED]", { 
+        segmentId, 
+        reason: result.reason,
+        currentCount: selectedSegmentIds.size 
+      });
+    }
   };
 
   const handleAddFavourites = () => {
@@ -162,8 +194,6 @@ export function SegmentListSidebar({
     addFavouritesMutation.mutate({ segments: segmentsToSave });
   };
 
-
-
   return (
     <div className="w-80 overflow-y-auto border-r bg-white p-4">
       <div className="space-y-4">
@@ -194,10 +224,17 @@ export function SegmentListSidebar({
           {selectedSegmentIds.size > 0 && (
             <div className="mb-4 rounded-lg bg-blue-50 p-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-blue-900">
-                  {selectedSegmentIds.size} segment
-                  {selectedSegmentIds.size === 1 ? "" : "s"} selected
-                </span>
+                <div className="flex flex-col">
+                  <span className="text-sm text-blue-900">
+                    {selectedSegmentIds.size} of {MAX_SEGMENTS} segment
+                    {selectedSegmentIds.size === 1 ? "" : "s"} selected
+                  </span>
+                  {selectedSegmentIds.size >= MAX_SEGMENTS && (
+                    <span className="text-xs text-orange-600 mt-1">
+                      ⚠️ Maximum segments selected
+                    </span>
+                  )}
+                </div>
                 <div className="flex gap-2">
                   <button
                     onClick={clearSelection}

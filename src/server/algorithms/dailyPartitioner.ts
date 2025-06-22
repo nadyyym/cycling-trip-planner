@@ -1,7 +1,6 @@
 import type { TSPSolution } from "./tsp";
 import type { SegmentMeta } from "~/server/integrations/strava";
 import type { CostMatrix } from "~/server/integrations/mapbox";
-import type { EasierDayRule } from "~/types/routePlanner";
 
 /**
  * Custom trip constraints for personalized cycling trip planning
@@ -15,8 +14,6 @@ export interface TripConstraints {
   maxDailyDistanceKm: number;
   /** Maximum elevation gain per day in meters */
   maxDailyElevationM: number;
-  /** Easier day rule configuration */
-  easierDayRule: EasierDayRule;
 }
 
 /**
@@ -51,8 +48,6 @@ export interface DayPartition {
   elevationGainM: number;
   /** Estimated duration in minutes */
   durationMinutes: number;
-  /** Whether this is an easier day (reduced limits) */
-  isEasierDay: boolean;
 }
 
 /**
@@ -64,17 +59,17 @@ export interface PartitionResult {
   /** Array of daily partitions (if successful) */
   partitions?: DayPartition[];
   /** Error code (if failed) */
-  errorCode?: "dailyLimitExceeded" | "customLimitExceeded" | "easyDayViolation" | "needMoreDays" | "segmentTooFar";
+  errorCode?: "dailyLimitExceeded" | "customLimitExceeded" | "needMoreDays" | "segmentTooFar";
   /** Human-readable error details */
   errorDetails?: string;
 }
 
 /**
- * Calculate the number of days between two dates (inclusive)
+ * Calculate the number of days in a trip (inclusive)
  * 
  * @param startDate Start date in ISO format (yyyy-mm-dd)
  * @param endDate End date in ISO format (yyyy-mm-dd)
- * @returns Number of days including both start and end dates
+ * @returns Number of days in the trip
  */
 function calculateTripDays(startDate: string, endDate: string): number {
   const start = new Date(startDate);
@@ -85,45 +80,8 @@ function calculateTripDays(startDate: string, endDate: string): number {
 }
 
 /**
- * Check if a given day should be an easier day based on the rule
- * 
- * @param dayNumber Day number (1-based)
- * @param easierDayRule Easier day rule configuration
- * @returns True if this should be an easier day
- */
-function isEasierDay(dayNumber: number, easierDayRule: EasierDayRule): boolean {
-  return dayNumber % easierDayRule.every === 0;
-}
-
-/**
- * Get the effective constraints for a specific day
- * 
- * @param dayNumber Day number (1-based)
- * @param constraints Base trip constraints
- * @returns Effective constraints for this day
- */
-function getDayConstraints(dayNumber: number, constraints: TripConstraints): {
-  maxDistanceKm: number;
-  maxElevationM: number;
-} {
-  const isEasier = isEasierDay(dayNumber, constraints.easierDayRule);
-  
-  if (isEasier) {
-    return {
-      maxDistanceKm: Math.min(constraints.easierDayRule.maxDistanceKm, constraints.maxDailyDistanceKm),
-      maxElevationM: Math.min(constraints.easierDayRule.maxElevationM, constraints.maxDailyElevationM),
-    };
-  }
-  
-  return {
-    maxDistanceKm: constraints.maxDailyDistanceKm,
-    maxElevationM: constraints.maxDailyElevationM,
-  };
-}
-
-/**
  * Main partitioning function that splits a route into daily segments with custom constraints
- * Uses dynamic programming to optimize for balanced days within constraints
+ * Uses a greedy approach to assign segments to days while respecting constraints
  *
  * @param tspSolution The optimized TSP solution with segment order
  * @param segmentMetas Metadata for all segments
@@ -149,7 +107,6 @@ export function partitionRoute(
       endDate: constraints.endDate,
       maxDailyDistanceKm: constraints.maxDailyDistanceKm,
       maxDailyElevationM: constraints.maxDailyElevationM,
-      easierDayRule: constraints.easierDayRule,
     },
     timestamp: new Date().toISOString(),
   });
@@ -195,8 +152,8 @@ export function partitionRoute(
 }
 
 /**
- * Enhanced partitioning implementation with custom constraints and easier day rules
- * This approach groups consecutive segments into days based on dynamic constraints
+ * Enhanced partitioning implementation with custom constraints
+ * This is the main algorithm that assigns segments to days
  */
 function partitionRouteWithConstraints(
   tspSolution: TSPSolution,
@@ -206,30 +163,21 @@ function partitionRouteWithConstraints(
   maxDays: number,
   tripStartIndex?: number,
 ): PartitionResult {
-  console.log(`[DAILY_PARTITIONER_CONSTRAINTS_START]`, {
-    segmentCount: tspSolution.orderedSegments.length,
-    maxDays,
-    approach: "constraint-based-grouping",
-    timestamp: new Date().toISOString(),
-  });
-
   const partitions: DayPartition[] = [];
-  let currentDaySegments: number[] = [];
-  let currentDayDistance = 0;
-  let currentDayElevation = 0;
-  let currentDayDuration = 0;
+  
   let currentDayNumber = 1;
+  let currentDaySegments: number[] = [];
+  let currentDayDistance = 0; // in meters
+  let currentDayElevation = 0; // in meters
+  let currentDayDuration = 0; // in seconds
 
-  // Add transfer distance from trip start to first segment if applicable
-  if (tripStartIndex !== undefined && tspSolution.orderedSegments.length > 0) {
-    const firstSegment = tspSolution.orderedSegments[0]!;
-    const transferDistance =
-      matrix.distances[tripStartIndex]?.[firstSegment.startWaypointIndex] ?? 0;
-    const transferDuration =
-      matrix.durations[tripStartIndex]?.[firstSegment.startWaypointIndex] ?? 0;
-
-    currentDayDistance += transferDistance;
-    currentDayDuration += transferDuration;
+  // Validate input
+  if (tspSolution.orderedSegments.length === 0) {
+    return {
+      success: false,
+      errorCode: "dailyLimitExceeded",
+      errorDetails: "No segments to partition",
+    };
   }
 
   // Process each segment in the optimized order
@@ -274,13 +222,10 @@ function partitionRouteWithConstraints(
     const newDuration =
       currentDayDuration + transferDuration + segmentDurationSeconds;
 
-    // Get constraints for current day (considering easier day rule)
-    const dayConstraints = getDayConstraints(currentDayNumber, constraints);
-
     // Check if adding this segment would violate constraints
     const newDistanceKm = newDistance / 1000;
-    const wouldExceedDistance = newDistanceKm > dayConstraints.maxDistanceKm;
-    const wouldExceedElevation = newElevation > dayConstraints.maxElevationM;
+    const wouldExceedDistance = newDistanceKm > constraints.maxDailyDistanceKm;
+    const wouldExceedElevation = newElevation > constraints.maxDailyElevationM;
 
     // If adding this segment would violate constraints, finalize current day
     if (
@@ -288,14 +233,12 @@ function partitionRouteWithConstraints(
       currentDaySegments.length > 0
     ) {
       // Finalize current day
-      const isCurrentDayEasier = isEasierDay(currentDayNumber, constraints.easierDayRule);
       partitions.push({
         dayNumber: currentDayNumber,
         segmentIndices: [...currentDaySegments],
         distanceKm: currentDayDistance / 1000,
         elevationGainM: currentDayElevation,
         durationMinutes: currentDayDuration / 60,
-        isEasierDay: isCurrentDayEasier,
       });
 
       // Check if we've reached the maximum number of days
@@ -321,7 +264,7 @@ function partitionRouteWithConstraints(
       currentDayDuration = newDuration;
     }
 
-    // Check if a single segment exceeds daily limits (even on easier days, check against base limits)
+    // Check if a single segment exceeds daily limits
     const segmentDistanceKm = (transferDistance + segmentMeta.distance) / 1000;
     if (segmentDistanceKm > constraints.maxDailyDistanceKm) {
       return {
@@ -342,36 +285,13 @@ function partitionRouteWithConstraints(
 
   // Finalize the last day if it has segments
   if (currentDaySegments.length > 0) {
-    const isCurrentDayEasier = isEasierDay(currentDayNumber, constraints.easierDayRule);
     partitions.push({
       dayNumber: currentDayNumber,
       segmentIndices: [...currentDaySegments],
       distanceKm: currentDayDistance / 1000,
       elevationGainM: currentDayElevation,
       durationMinutes: currentDayDuration / 60,
-      isEasierDay: isCurrentDayEasier,
     });
-  }
-
-  // Validate easier day constraints
-  for (const partition of partitions) {
-    if (partition.isEasierDay) {
-      const easierConstraints = constraints.easierDayRule;
-      if (partition.distanceKm > easierConstraints.maxDistanceKm) {
-        return {
-          success: false,
-          errorCode: "easyDayViolation",
-          errorDetails: `Day ${partition.dayNumber} is an easier day but has ${Math.round(partition.distanceKm)}km, exceeding easier day limit of ${easierConstraints.maxDistanceKm}km`,
-        };
-      }
-      if (partition.elevationGainM > easierConstraints.maxElevationM) {
-        return {
-          success: false,
-          errorCode: "easyDayViolation",
-          errorDetails: `Day ${partition.dayNumber} is an easier day but has ${Math.round(partition.elevationGainM)}m elevation, exceeding easier day limit of ${easierConstraints.maxElevationM}m`,
-        };
-      }
-    }
   }
 
   const partitionDuration = Date.now() - Date.now();
@@ -380,12 +300,10 @@ function partitionRouteWithConstraints(
     (sum, p) => sum + p.elevationGainM,
     0,
   );
-  const easierDayCount = partitions.filter(p => p.isEasierDay).length;
 
   console.log(`[DAILY_PARTITIONER_SUCCESS]`, {
     segmentCount: tspSolution.orderedSegments.length,
     partitionCount: partitions.length,
-    easierDayCount,
     totalDistanceKm: Math.round(totalDistanceKm),
     totalElevationM: Math.round(totalElevationM),
     duration: `${partitionDuration}ms`,
@@ -395,7 +313,6 @@ function partitionRouteWithConstraints(
       distanceKm: Math.round(p.distanceKm),
       elevationM: Math.round(p.elevationGainM),
       durationHours: Math.round((p.durationMinutes / 60) * 10) / 10,
-      isEasierDay: p.isEasierDay,
     })),
     timestamp: new Date().toISOString(),
   });
@@ -423,11 +340,6 @@ export function partitionRouteLegacy(
     endDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]!, // 4 days from now
     maxDailyDistanceKm: DAILY_CONSTRAINTS.MAX_DISTANCE_KM,
     maxDailyElevationM: DAILY_CONSTRAINTS.MAX_ELEVATION_M,
-    easierDayRule: {
-      every: 3,
-      maxDistanceKm: 60,
-      maxElevationM: 1000,
-    },
   };
 
   return partitionRoute(tspSolution, segmentMetas, matrix, legacyConstraints, tripStartIndex);

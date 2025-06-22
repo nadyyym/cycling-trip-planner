@@ -15,81 +15,52 @@ export interface TripPlanInput {
   maxDailyDistanceKm: number;
   /** Maximum daily elevation gain in meters */
   maxDailyElevationM: number;
-  /** Easier day rule configuration */
-  easierDayRule: {
-    every: number;
-    maxDistanceKm: number;
-    maxElevationM: number;
-  };
 }
 
 /**
- * Custom hook for trip planning that wraps the tRPC mutation
- * Handles conversion from UI segment selection to API payload format
- * 
- * @returns Mutation object with planning state and trigger function
+ * Custom hook for trip planning with optimistic mutations
+ * Handles the complete trip planning workflow including error management
  */
 export function useTripPlanner() {
-  const planTripMutation = api.routePlanner.planTrip.useMutation();
+  const mutation = api.routePlanner.planTrip.useMutation();
 
-  /**
-   * Plan a trip with the selected segments and custom constraints
-   * Converts segment IDs to the required API payload format
-   * 
-   * @param input Trip planning input with segment IDs and constraints
-   */
   const planTrip = (input: TripPlanInput) => {
     console.log("[TRIP_PLANNER_START]", {
       segmentCount: input.segmentIds.length,
-      segmentIds: input.segmentIds,
-      startDate: input.startDate,
-      endDate: input.endDate,
-      maxDailyDistanceKm: input.maxDailyDistanceKm,
-      maxDailyElevationM: input.maxDailyElevationM,
-      easierDayRule: input.easierDayRule,
+      constraints: {
+        startDate: input.startDate,
+        endDate: input.endDate,
+        maxDailyDistanceKm: input.maxDailyDistanceKm,
+        maxDailyElevationM: input.maxDailyElevationM,
+      },
       timestamp: new Date().toISOString(),
     });
 
-    // Convert string IDs to numbers and build API payload
+    // Convert string segment IDs to the format expected by the API
     const segments = input.segmentIds.map((segmentId) => ({
       segmentId: parseInt(segmentId, 10),
-      forwardDirection: true, // Always forward for first iteration
+      forwardDirection: true, // Always forward for simplicity
     }));
 
-    // Build the full API payload with custom constraints
-    const apiPayload = {
+    return mutation.mutate({
       segments,
-      // No tripStart for first iteration
-      tripStart: undefined,
-      // Custom constraints from user input
       startDate: input.startDate,
       endDate: input.endDate,
       maxDailyDistanceKm: input.maxDailyDistanceKm,
       maxDailyElevationM: input.maxDailyElevationM,
-      easierDayRule: input.easierDayRule,
-    };
-
-    console.log("[TRIP_PLANNER_API_PAYLOAD]", {
-      payload: apiPayload,
-      timestamp: new Date().toISOString(),
     });
-
-    // Trigger the mutation
-    planTripMutation.mutate(apiPayload);
   };
 
   return {
     // Mutation state
-    isPending: planTripMutation.isPending,
-    isError: planTripMutation.isError,
-    isSuccess: planTripMutation.isSuccess,
-    error: planTripMutation.error,
-    data: planTripMutation.data,
+    isPending: mutation.isPending,
+    isError: mutation.isError,
+    isSuccess: mutation.isSuccess,
+    error: mutation.error,
+    data: mutation.data,
     
-    // Mutation trigger
+    // Actions
     planTrip,
-    
-    // Reset function
-    reset: planTripMutation.reset,
+    reset: mutation.reset,
   };
 } 

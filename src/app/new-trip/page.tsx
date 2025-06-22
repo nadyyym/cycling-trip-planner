@@ -7,7 +7,7 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import { env } from "~/env";
 import { RouteListSidebar } from "../_components/RouteListSidebar";
 import { useTripRouteStore } from "../_hooks/useTripRouteStore";
-import { useTripPlanner } from "../_hooks/useTripPlanner";
+import { useTripPlanner, type TripPlanInput } from "../_hooks/useTripPlanner";
 import { useTripConstraintStore } from "../_hooks/useTripConstraintStore";
 import { ArrowLeft, Calendar, MapPin, Mountain } from "lucide-react";
 import Link from "next/link";
@@ -66,6 +66,9 @@ function NewTripPageContent() {
     y: 0,
     route: null,
   });
+
+  // Reference to track if planning has been attempted for current segments
+  const planningAttempted = useRef(false);
 
   // Initialize map
   useEffect(() => {
@@ -139,23 +142,57 @@ function NewTripPageContent() {
 
   // Trigger planning when page loads with segment IDs
   useEffect(() => {
-    if (segmentIds.length > 0 && !isPending && !isSuccess && !isError && !currentTrip) {
+    // Reset planning attempted flag when segment IDs change
+    planningAttempted.current = false;
+  }, [segmentIds]);
+
+  useEffect(() => {
+    if (
+      segmentIds.length > 0 && 
+      !isPending && 
+      !isSuccess && 
+      !isError && 
+      !currentTrip &&
+      !planningAttempted.current &&
+      constraints.startDate &&
+      constraints.endDate
+    ) {
       console.log("[NEW_TRIP_AUTO_START]", {
         segmentCount: segmentIds.length,
         segmentIds: segmentIds,
+        constraints: {
+          startDate: constraints.startDate,
+          endDate: constraints.endDate,
+          maxDailyDistanceKm: constraints.maxDailyDistanceKm,
+          maxDailyElevationM: constraints.maxDailyElevationM,
+        },
         timestamp: new Date().toISOString(),
       });
 
-      planTrip({
-        segmentIds,
+      planningAttempted.current = true;
+
+      const input: TripPlanInput = {
+        segmentIds: segmentIds,
         startDate: constraints.startDate,
         endDate: constraints.endDate,
         maxDailyDistanceKm: constraints.maxDailyDistanceKm,
         maxDailyElevationM: constraints.maxDailyElevationM,
-        easierDayRule: constraints.easierDayRule,
-      });
+      };
+
+      planTrip(input);
     }
-  }, [segmentIds, isPending, isSuccess, isError, currentTrip, planTrip, constraints]);
+  }, [
+    segmentIds, 
+    isPending, 
+    isSuccess, 
+    isError, 
+    currentTrip, 
+    planTrip,
+    constraints.startDate,
+    constraints.endDate,
+    constraints.maxDailyDistanceKm,
+    constraints.maxDailyElevationM,
+  ]);
 
   // Update trip route store when planning succeeds and center map
   useEffect(() => {
