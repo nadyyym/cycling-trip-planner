@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
@@ -15,7 +15,7 @@ import { getDayColorsArray, getDayColorHex } from "~/lib/mapUtils";
 // Mapbox access token
 mapboxgl.accessToken = env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
 
-export default function NewTripPage() {
+function NewTripPageContent() {
   // Map-related state
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -377,7 +377,12 @@ export default function NewTripPage() {
             // Safe parsing of segment names with fallback
             let segmentNames: string[] = [];
             try {
-              segmentNames = properties.segmentNames ? JSON.parse(properties.segmentNames as string) : [];
+              if (properties.segmentNames) {
+                const parsed: unknown = JSON.parse(properties.segmentNames as string);
+                if (Array.isArray(parsed) && parsed.every((item: unknown): item is string => typeof item === 'string')) {
+                  segmentNames = parsed;
+                }
+              }
             } catch (error) {
               console.warn("Failed to parse segment names:", error);
               segmentNames = [];
@@ -519,4 +524,12 @@ export default function NewTripPage() {
       </div>
     </div>
   );
-} 
+}
+
+export default function NewTripPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <NewTripPageContent />
+    </Suspense>
+  );
+}
