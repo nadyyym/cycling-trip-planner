@@ -17,7 +17,7 @@ import {
   reverseGeocode,
   type LocationInfo,
 } from "~/server/integrations/mapbox";
-import { MapPin } from "lucide-react";
+import { MapPin, Search, Filter } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -27,6 +27,7 @@ import {
 } from "~/components/ui/dialog";
 import { AutocompleteInput } from "../_components/AutocompleteInput";
 import { getDayColorsArray } from "~/lib/mapUtils";
+import { useSidebar } from "~/app/_components/FloatingSidebar";
 
 // Mapbox access token
 mapboxgl.accessToken = env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
@@ -46,7 +47,107 @@ interface MapboxSuggestion {
   place_type: string[];
 }
 
+// Mock data for demonstration
+const mockSegments = [
+  {
+    id: "1",
+    name: "Col du Galibier",
+    distance: 18.2,
+    elevation: 1200,
+    grade: 6.8,
+    difficulty: "Hard",
+    location: "French Alps",
+  },
+  {
+    id: "2", 
+    name: "Alpe d'Huez",
+    distance: 13.8,
+    elevation: 1100,
+    grade: 8.1,
+    difficulty: "Very Hard",
+    location: "French Alps",
+  },
+  {
+    id: "3",
+    name: "Mont Ventoux",
+    distance: 21.3,
+    elevation: 1610,
+    grade: 7.5,
+    difficulty: "Hard",
+    location: "Provence",
+  },
+];
+
+function SegmentList() {
+  return (
+    <div className="p-4">
+      {/* Search Header */}
+      <div className="mb-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search segments..."
+            className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-10 pr-4 text-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500"
+          />
+        </div>
+        <button className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white py-2 text-sm text-gray-600 hover:bg-gray-50">
+          <Filter className="h-4 w-4" />
+          Filters
+        </button>
+      </div>
+
+      {/* Segment List */}
+      <div className="space-y-3">
+        {mockSegments.map((segment) => (
+          <div
+            key={segment.id}
+            className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition-shadow hover:shadow-md"
+          >
+            <div className="mb-2">
+              <h3 className="font-semibold text-gray-900">{segment.name}</h3>
+              <p className="text-xs text-gray-500">{segment.location}</p>
+            </div>
+            
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              <div>
+                <span className="text-gray-500">Distance</span>
+                <p className="font-medium">{segment.distance} km</p>
+              </div>
+              <div>
+                <span className="text-gray-500">Elevation</span>
+                <p className="font-medium">{segment.elevation} m</p>
+              </div>
+              <div>
+                <span className="text-gray-500">Grade</span>
+                <p className="font-medium">{segment.grade}%</p>
+              </div>
+            </div>
+            
+            <div className="mt-2 flex items-center justify-between">
+              <span className={`rounded-full px-2 py-1 text-xs font-medium ${
+                segment.difficulty === "Very Hard" 
+                  ? "bg-red-100 text-red-800"
+                  : segment.difficulty === "Hard"
+                  ? "bg-orange-100 text-orange-800"
+                  : "bg-green-100 text-green-800"
+              }`}>
+                {segment.difficulty}
+              </span>
+              <button className="text-xs text-green-600 hover:text-green-700">
+                Add to Trip
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function ExplorePage() {
+  const { openSidebar } = useSidebar();
+
   // Map-related state
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -666,232 +767,41 @@ export default function ExplorePage() {
     setSearchValue("");
   };
 
+  useEffect(() => {
+    // Open the sidebar with segment list when page loads
+    openSidebar(<SegmentList />, "Cycling Segments");
+  }, [openSidebar]);
+
   return (
-    <div className="flex h-screen flex-col">
-      {/* Header with Favourites */}
-      <header className="border-b bg-white px-4 py-3 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link
-              href="/"
-              className="text-sm text-gray-500 underline hover:text-gray-700"
-            >
-              ← Back to home
-            </Link>
-            <h1 className="text-xl font-semibold text-gray-900">
-              Explore Cycling Segments
-            </h1>
-          </div>
-          <div className="flex items-center gap-4">
-            {/* Favourites section moved to header */}
-            <Link
-              href="/favourites"
-              className="flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 hover:bg-blue-100 transition-colors"
-            >
-              <span className="text-sm font-medium text-blue-900">
-                ⭐ Favourites
-              </span>
-              {favouriteCount && favouriteCount.count > 0 && (
-                <span className="rounded-full bg-blue-500 px-2 py-1 text-xs text-white">
-                  {favouriteCount.count}
-                </span>
-              )}
-            </Link>
-            <div className="text-sm text-gray-500">
-              Lng: {lng} | Lat: {lat} | Zoom: {zoom}
+    <div className="relative h-[calc(100vh-3.5rem)] w-full">
+      {/* Map Placeholder */}
+      <div className="h-full w-full bg-gradient-to-br from-green-100 to-blue-100">
+        <div className="flex h-full items-center justify-center">
+          <div className="text-center">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-white shadow-lg">
+              <MapPin className="h-8 w-8 text-green-600" />
             </div>
+            <h2 className="mb-2 text-xl font-semibold text-gray-900">
+              Interactive Map
+            </h2>
+            <p className="text-gray-600">
+              Map component will be rendered here
+            </p>
+            <p className="mt-2 text-sm text-gray-500">
+              The floating sidebar shows cycling segments that can be explored on this map
+            </p>
           </div>
         </div>
-      </header>
+      </div>
 
-      {/* Main content */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar - simplified without tabs */}
-        <div className="flex w-80 flex-col overflow-hidden border-r bg-white">
-          {/* Search section */}
-          <div className="flex-shrink-0 border-b p-4">
-            {/* ==== AUTOCOMPLETE SEARCH (Enhanced) ====  */}
-            {/* Real-time address suggestions with Mapbox geocoding */}
-            {/* Replaces basic search with autocomplete functionality */}
-            {/* =================================================== */}
-            <AutocompleteInput
-              value={searchValue}
-              onChange={setSearchValue}
-              onSelect={handleSuggestionSelect}
-              placeholder={
-                locationPermission === "granted"
-                  ? "Enter city or address..."
-                  : "Enter city or use your current location..."
-              }
-              showSearchButton={true}
-              onSearchClick={() => void handleSearch()}
-              searchButtonText="Search"
-            />
-          </div>
-
-          {/* Segment list - directly below search without tabs */}
-          <div className="flex-1 overflow-hidden">
-            <SegmentListSidebar
-              segments={segments}
-              isLoading={isLoadingSegments}
-              error={segmentError}
-              debouncedBounds={debouncedBounds}
-              isRateLimited={isSegmentRateLimited}
-            />
-          </div>
-        </div>
-
-        {/* Map */}
-        <div className="relative flex-1">
-          {mapError ? (
-            <div className="flex h-full items-center justify-center bg-gray-100">
-              <div className="p-8 text-center">
-                <div className="mb-2 text-lg font-medium text-red-600">
-                  Map Error
-                </div>
-                <div className="mb-4 text-gray-600">{mapError}</div>
-                <button
-                  onClick={() => window.location.reload()}
-                  className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-                >
-                  Refresh Page
-                </button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <div ref={mapContainer} className="h-full w-full" />
-
-              {/* Map overlay info */}
-              <div className="absolute left-4 top-4 rounded-lg bg-white p-3 shadow-md">
-                <div className="text-sm">
-                  <div className="font-medium text-gray-900">
-                    {locationPermission === "granted" && currentLocationInfo
-                      ? currentLocationInfo.displayName
-                      : locationPermission === "granted"
-                        ? "📍 Your Location"
-                        : "🏛️ Girona, Spain"}
-                  </div>
-                  <div className="text-gray-500">
-                    {locationPermission === "granted"
-                      ? "Showing your current area"
-                      : "Famous cycling destination"}
-                  </div>
-                </div>
-              </div>
-
-              {/* ==== MINIMAL LOCATION BUTTON (Step 7) ====  */}
-              {/* Compact map button to replace bulky sidebar section */}
-              {/* ============================================== */}
-              <Dialog
-                open={isLocationDialogOpen}
-                onOpenChange={setIsLocationDialogOpen}
-              >
-                <DialogTrigger asChild>
-                  <button
-                    className="absolute right-4 top-4 rounded-lg bg-white p-3 shadow-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                    aria-label="Change location"
-                    title="Change area"
-                  >
-                    <MapPin className="h-5 w-5 text-gray-700" />
-                  </button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>Change Location</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    {/* Current location button */}
-                    <button
-                      onClick={() => {
-                        handleUseMyLocation();
-                        setIsLocationDialogOpen(false);
-                      }}
-                      disabled={isLoadingLocation}
-                      className="w-full rounded-md bg-green-600 px-4 py-3 text-sm text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {isLoadingLocation
-                        ? "Getting your location..."
-                        : locationPermission === "denied"
-                          ? "Location access denied"
-                          : "📍 Use my current location"}
-                    </button>
-
-                    {locationPermission === "denied" && (
-                      <p className="text-xs text-gray-600">
-                        Enable location permissions in your browser settings to
-                        use your current location
-                      </p>
-                    )}
-
-                    {/* Divider */}
-                    <div className="relative">
-                      <div className="absolute inset-0 flex items-center">
-                        <span className="w-full border-t" />
-                      </div>
-                      <div className="relative flex justify-center text-xs uppercase">
-                        <span className="bg-white px-2 text-gray-500">or</span>
-                      </div>
-                    </div>
-
-                    {/* Autocomplete search form */}
-                    <div className="space-y-2">
-                      <AutocompleteInput
-                        value={searchValue}
-                        onChange={setSearchValue}
-                        onSelect={(suggestion) => {
-                          handleSuggestionSelect(suggestion);
-                          setIsLocationDialogOpen(false);
-                        }}
-                        placeholder="Enter city or address..."
-                        className="w-full"
-                      />
-                      <button
-                        onClick={() => {
-                          void handleSearch();
-                          setIsLocationDialogOpen(false);
-                        }}
-                        className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                      >
-                        Search Location
-                      </button>
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
-
-              {/* Map tooltip - appears when hovering over segments */}
-              {mapTooltip.visible && mapTooltip.segment && (
-                <div
-                  className="pointer-events-none absolute z-50 rounded-md bg-gray-900 px-3 py-2 text-sm text-white shadow-lg"
-                  style={{
-                    left: mapTooltip.x + 10,
-                    top: mapTooltip.y - 10,
-                    transform: "translateY(-100%)",
-                  }}
-                >
-                  <div className="space-y-1">
-                    <p className="font-medium">{mapTooltip.segment.name}</p>
-                    <div className="flex items-center gap-3 text-xs">
-                      <span>
-                        📏 {(mapTooltip.segment.distance / 1000).toFixed(1)} km
-                      </span>
-                      <span>
-                        📈 {mapTooltip.segment.averageGrade.toFixed(1)}%
-                      </span>
-                    </div>
-                    {mapTooltip.segment.elevationGain > 0 && (
-                      <p className="text-xs">
-                        ⛰️ {Math.round(mapTooltip.segment.elevationGain)}m
-                        elevation
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
+      {/* Map Controls */}
+      <div className="absolute bottom-4 right-4 flex flex-col gap-2">
+        <button className="flex h-10 w-10 items-center justify-center rounded-lg bg-white shadow-md hover:shadow-lg">
+          <span className="text-lg">+</span>
+        </button>
+        <button className="flex h-10 w-10 items-center justify-center rounded-lg bg-white shadow-md hover:shadow-lg">
+          <span className="text-lg">−</span>
+        </button>
       </div>
     </div>
   );
