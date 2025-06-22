@@ -63,6 +63,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   accounts: many(accounts),
   itineraries: many(itineraries),
   favourites: many(favourites),
+  trips: many(trips),
 }));
 
 export const accounts = createTable(
@@ -216,3 +217,38 @@ export const favouritesRelations = relations(favourites, ({ one }) => ({
 export const segmentsRelations = relations(segments, ({ many }) => ({
   favourites: many(favourites),
 }));
+
+// Trips table for storing saved multi-day cycling trips with shareable permalinks
+export const trips = createTable(
+  "trip",
+  (d) => ({
+    id: uuid()
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    createdAt: d
+      .timestamp({ withTimezone: true })
+      .default(sql`CURRENT_TIMESTAMP`)
+      .notNull(),
+    creatorUserId: varchar({ length: 255 })
+      .references(() => users.id), // nullable - allows anonymous trip creation
+    startDate: date().notNull(),
+    endDate: date().notNull(),
+    constraints: jsonb().notNull(), // user's input constraints (maxDailyDistanceKm, etc.)
+    totalDistanceKm: real().notNull(),
+    totalElevationM: real().notNull(),
+    days: jsonb().notNull(), // array of day objects with start_locality, end_locality, etc.
+    geometryS3Key: text(), // S3 key for compressed GeoJSON of full geometry
+    slug: varchar({ length: 255 }).notNull().unique(), // SEO-friendly unique identifier
+  }),
+  (t) => [
+    index("trip_slug_idx").on(t.slug),
+    index("trip_creator_idx").on(t.creatorUserId),
+    index("trip_created_at_idx").on(t.createdAt),
+  ],
+);
+
+export const tripsRelations = relations(trips, ({ one }) => ({
+  creator: one(users, { fields: [trips.creatorUserId], references: [users.id] }),
+}));
+
+

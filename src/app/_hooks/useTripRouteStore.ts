@@ -31,6 +31,19 @@ export interface Trip {
   totalAscentM: number;
   totalDescentM: number;
   startCoordinate?: [number, number]; // First coordinate for map centering
+  // Saved trip information
+  savedTripData?: {
+    slug: string;
+    shareUrl: string;
+    days: Array<{
+      day: number;
+      dayName: string;
+      startLocality: string;
+      endLocality: string;
+      distanceKm: number;
+      elevationM: number;
+    }>;
+  };
 }
 
 /**
@@ -45,6 +58,7 @@ export interface TripRouteStore {
   
   /** Actions */
   setTrip: (trip: Trip) => void;
+  setSavedTripData: (savedData: Trip['savedTripData']) => void;
   clearTrip: () => void;
   setRoutesVisible: (visible: boolean) => void;
 }
@@ -67,6 +81,22 @@ export const useTripRouteStore = create<TripRouteStore>((set) => ({
     });
 
     set({ currentTrip: trip, routesVisible: true });
+  },
+
+  setSavedTripData: (savedData: Trip['savedTripData']) => {
+    console.log("[TRIP_ROUTE_STORE_SET_SAVED_DATA]", {
+      slug: savedData?.slug,
+      shareUrl: savedData?.shareUrl,
+      dayCount: savedData?.days.length,
+      timestamp: new Date().toISOString(),
+    });
+
+    set((state) => ({
+      currentTrip: state.currentTrip ? {
+        ...state.currentTrip,
+        savedTripData: savedData,
+      } : null,
+    }));
   },
 
   clearTrip: () => {

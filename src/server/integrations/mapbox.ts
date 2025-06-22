@@ -100,10 +100,10 @@ const elevationCache = new LRUCache<ElevationResponse>({
   ttlMs: 24 * 60 * 60 * 1000, // 24 hours
 });
 
-// Cache for reverse geocoding results with shorter TTL as location context changes more frequently
+// Cache for reverse geocoding results for trip naming with 24h TTL as specified in PRD
 const geocodingCache = new LRUCache<LocationInfo>({
-  maxSize: 500,
-  ttlMs: 60 * 60 * 1000, // 1 hour as specified in requirements
+  maxSize: 1000,
+  ttlMs: 24 * 60 * 60 * 1000, // 24 hours as specified in PRD requirements
 });
 
 /**
@@ -359,9 +359,10 @@ export async function getDirections(
 }
 
 /**
- * Reverse geocode coordinates to get city and country information
+ * Reverse geocode coordinates to get city and country information for trip naming
  * Uses Mapbox Geocoding API to convert [longitude, latitude] to location name
- * Results are cached for 1 hour to avoid excessive API calls
+ * Prefers locality > place > neighborhood for better trip naming accuracy
+ * Results are cached for 24 hours to avoid excessive API calls
  *
  * @param coordinates [longitude, latitude] pair
  * @returns LocationInfo with city, country code, and display name
@@ -385,13 +386,13 @@ export async function reverseGeocode(
 
   console.log(`[MAPBOX_REVERSE_GEOCODING_START]`, {
     coordinates,
-    types: "place",
+    types: "place,locality,neighborhood",
     language: "en",
     timestamp: new Date().toISOString(),
   });
 
   const [lng, lat] = coordinates;
-  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?types=place&language=en&access_token=${env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}`;
+  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?types=place,locality,neighborhood&language=en&access_token=${env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}`;
 
   try {
     const response = await mapboxRequest<MapboxGeocodingResponse>(
@@ -402,9 +403,9 @@ export async function reverseGeocode(
     if (!response.features || response.features.length === 0) {
       // Fallback to a generic location name if no results
       const fallback: LocationInfo = {
-        cityName: "Unknown Location",
+        cityName: "Unknown",
         countryCode: "",
-        displayName: "📍 Your Location",
+        displayName: "Unknown",
         fullPlaceName: "Location not found",
       };
 
@@ -421,13 +422,26 @@ export async function reverseGeocode(
       return fallback;
     }
 
-    const feature = response.features[0]!;
-    const cityName = feature.text;
+    // Find the best feature based on priority: locality > place > neighborhood
+    let bestFeature = response.features[0]!;
+    const typePreference = ["locality", "place", "neighborhood"];
+
+    for (const preference of typePreference) {
+      const preferredFeature = response.features.find((feature) =>
+        feature.place_type.includes(preference)
+      );
+      if (preferredFeature) {
+        bestFeature = preferredFeature;
+        break;
+      }
+    }
+
+    const cityName = bestFeature.text;
     let countryCode = "";
 
     // Extract country code from context if available
-    if (feature.context) {
-      const countryContext = feature.context.find((ctx) =>
+    if (bestFeature.context) {
+      const countryContext = bestFeature.context.find((ctx) =>
         ctx.id.startsWith("country"),
       );
       if (countryContext?.short_code) {
@@ -435,16 +449,14 @@ export async function reverseGeocode(
       }
     }
 
-    // Create display name with emoji and country code
-    const displayName = countryCode
-      ? `📍 ${cityName}, ${countryCode}`
-      : `📍 ${cityName}`;
+    // For trip naming, we want clean locality names without emoji
+    const displayName = cityName;
 
     const result: LocationInfo = {
       cityName,
       countryCode,
       displayName,
-      fullPlaceName: feature.place_name,
+      fullPlaceName: bestFeature.place_name,
     };
 
     // Cache the result
@@ -455,30 +467,33 @@ export async function reverseGeocode(
       cityName,
       countryCode,
       displayName,
-      fullPlaceName: feature.place_name,
+      fullPlaceName: bestFeature.place_name,
+      selectedType: bestFeature.place_type[0],
+      totalFeatures: response.features.length,
       cached: true,
       timestamp: new Date().toISOString(),
     });
 
     return result;
   } catch (error) {
-    // Fallback to generic location name on error
+    // Log the error for monitoring but continue with fallback
+    console.error(`[REVERSE_GEOCODE_ERROR]`, {
+      coordinates,
+      error: error instanceof Error ? error.message : "Unknown error",
+      status: error instanceof ExternalApiError ? error.status : "unknown",
+      timestamp: new Date().toISOString(),
+    });
+
+    // Fallback to coordinate-based location name on error
     const fallback: LocationInfo = {
-      cityName: "Your Location",
+      cityName: "Unknown",
       countryCode: "",
-      displayName: "📍 Your Location",
+      displayName: "Unknown",
       fullPlaceName: "Reverse geocoding failed",
     };
 
     // Cache the fallback for a shorter period to allow retry
     geocodingCache.set(cacheKey, fallback);
-
-    console.warn(`[MAPBOX_REVERSE_GEOCODING_ERROR]`, {
-      coordinates,
-      error: error instanceof Error ? error.message : "Unknown error",
-      fallback: fallback.displayName,
-      timestamp: new Date().toISOString(),
-    });
 
     return fallback;
   }

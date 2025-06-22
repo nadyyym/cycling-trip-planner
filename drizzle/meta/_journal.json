@@ -43,6 +43,13 @@
       "when": 1750589363610,
       "tag": "0005_magenta_gambit",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1750596110360,
+      "tag": "0006_illegal_thunderbolt",
+      "breakpoints": true
     }
   ]
 }

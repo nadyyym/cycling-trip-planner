@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, Suspense } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { env } from "~/env";
@@ -46,7 +46,8 @@ function NewTripPageContent() {
     error,
     data,
     planTrip,
-    reset,
+    isSaved,
+    savedTrip,
   } = useTripPlanner();
 
   // Map tooltip state for route hover
@@ -69,6 +70,13 @@ function NewTripPageContent() {
 
   // Reference to track if planning has been attempted for current segments
   const planningAttempted = useRef(false);
+  
+  // Reference to track if saving has been attempted for current trip
+  const savingAttempted = useRef(false);
+  
+  // Reference to track the last processed trip data to avoid re-processing
+  const lastProcessedData = useRef<any>(null);
+  const lastProcessedSavedTrip = useRef<any>(null);
 
   // Initialize map
   useEffect(() => {
@@ -142,8 +150,11 @@ function NewTripPageContent() {
 
   // Trigger planning when page loads with segment IDs
   useEffect(() => {
-    // Reset planning attempted flag when segment IDs change
+    // Reset planning and saving attempted flags when segment IDs change
     planningAttempted.current = false;
+    savingAttempted.current = false;
+    lastProcessedData.current = null;
+    lastProcessedSavedTrip.current = null;
   }, [segmentIds]);
 
   useEffect(() => {
@@ -196,12 +207,15 @@ function NewTripPageContent() {
 
   // Update trip route store when planning succeeds and center map
   useEffect(() => {
-    if (isSuccess && data?.ok) {
+    if (isSuccess && data?.ok && data !== lastProcessedData.current) {
       console.log("[NEW_TRIP_SUCCESS]", {
         routeCount: data.routes.length,
         totalDistance: Math.round(data.totalDistanceKm),
         timestamp: new Date().toISOString(),
       });
+
+      // Mark this data as processed to prevent re-processing
+      lastProcessedData.current = data;
 
       // Convert API response to trip route store format
       const tripRoutes = data.routes.map((route) => ({
@@ -234,6 +248,30 @@ function NewTripPageContent() {
     }
   }, [isSuccess, data]);
 
+
+
+  // Update trip route store with saved trip data
+  useEffect(() => {
+    if (isSaved && savedTrip && savedTrip !== lastProcessedSavedTrip.current) {
+      console.log("[NEW_TRIP_SAVED]", {
+        slug: savedTrip.slug,
+        shareUrl: savedTrip.shareUrl,
+        dayCount: savedTrip.days.length,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Mark this saved trip as processed
+      lastProcessedSavedTrip.current = savedTrip;
+
+      const { setSavedTripData } = useTripRouteStore.getState();
+      setSavedTripData({
+        slug: savedTrip.slug,
+        shareUrl: savedTrip.shareUrl,
+        days: savedTrip.days,
+      });
+    }
+  }, [isSaved, savedTrip]);
+
   // Display trip routes on map
   useEffect(() => {
     if (!map.current?.isStyleLoaded()) {
@@ -248,7 +286,7 @@ function NewTripPageContent() {
     });
 
     // Define colors for different days using centralized colors
-    const dayColors = getDayColorsArray(); // ["#6366f1", "#10b981", "#f97316", "#ec4899"]
+    // const dayColors = getDayColorsArray(); // ["#6366f1", "#10b981", "#f97316", "#ec4899"]
 
     // Remove existing trip route layers and sources
     try {
@@ -303,7 +341,7 @@ function NewTripPageContent() {
 
       try {
         // Add route lines and markers for each day
-        currentTrip.routes.forEach((route, index) => {
+        currentTrip.routes.forEach((route) => {
           try {
             const color = getDayColorHex(route.dayNumber);
             const routeSourceId = `trip-route-day-${route.dayNumber}-source`;

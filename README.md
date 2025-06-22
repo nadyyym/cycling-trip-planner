@@ -70,6 +70,9 @@ STRAVA_CLIENT_SECRET="your-strava-client-secret"
 
 # Mapbox
 NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN="your-mapbox-token"
+
+# Trip Sharing
+PUBLIC_TRIP_BASE_URL="http://localhost:3000" # Base URL for shareable trip links
 ```
 
 ## Deployment
@@ -190,6 +193,19 @@ NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN="your-mapbox-token"
 - `endDate` (date)
 - `json` (jsonb) - itinerary details
 - `createdAt` (timestamp)
+
+### Trips
+- `id` (uuid, PK)
+- `createdAt` (timestamp)
+- `creatorUserId` (varchar, FK, nullable) - References users.id, allows anonymous trip creation
+- `startDate` (date)
+- `endDate` (date)
+- `constraints` (jsonb) - User's input constraints (maxDailyDistanceKm, etc.)
+- `totalDistanceKm` (real)
+- `totalElevationM` (real)
+- `days` (jsonb) - Array of day objects with start_locality, end_locality, distance, elevation, etc.
+- `geometryS3Key` (text, nullable) - S3 key for compressed GeoJSON of full geometry
+- `slug` (varchar, unique) - SEO-friendly unique identifier for shareable URLs
 
 ## Features
 
