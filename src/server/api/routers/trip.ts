@@ -2,7 +2,7 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure, publicProcedure } from "~/server/api/trpc";
 import { trips } from "~/server/db/schema";
 import { reverseGeocode } from "~/server/integrations/mapbox";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 
 /**
  * Input schema for saving a trip based on route planner output
@@ -319,5 +319,71 @@ export const tripRouter = createTRPCRouter({
         } : null,
         isCreator: ctx.session?.user?.id === trip.creatorUserId,
       };
+    }),
+
+  /**
+   * Get all trips for the current authenticated user
+   * Returns trips ordered by creation date (newest first)
+   */
+  getAllForUser: protectedProcedure
+    .query(async ({ ctx }) => {
+      const userId = ctx.session.user.id;
+      
+      console.log(`[TRIP_GET_ALL_FOR_USER_START]`, {
+        userId,
+        timestamp: new Date().toISOString(),
+      });
+
+      try {
+        const userTrips = await ctx.db.query.trips.findMany({
+          where: eq(trips.creatorUserId, userId),
+          orderBy: [desc(trips.createdAt)],
+          columns: {
+            id: true,
+            slug: true,
+            startDate: true,
+            endDate: true,
+            totalDistanceKm: true,
+            totalElevationM: true,
+            days: true,
+            constraints: true,
+            createdAt: true,
+          },
+        });
+
+        console.log(`[TRIP_GET_ALL_FOR_USER_SUCCESS]`, {
+          userId,
+          tripCount: userTrips.length,
+          timestamp: new Date().toISOString(),
+        });
+
+        return userTrips.map(trip => ({
+          id: trip.id,
+          slug: trip.slug,
+          startDate: trip.startDate,
+          endDate: trip.endDate,
+          totalDistanceKm: trip.totalDistanceKm,
+          totalElevationM: trip.totalElevationM,
+          days: trip.days,
+          constraints: trip.constraints,
+          createdAt: trip.createdAt,
+          // Generate share URL for easy access
+          shareUrl: `${process.env.PUBLIC_TRIP_BASE_URL ?? "http://localhost:3000"}/trip/${trip.slug}`,
+        }));
+
+      } catch (error) {
+        console.error(`[TRIP_GET_ALL_FOR_USER_ERROR]`, {
+          userId,
+          error: error instanceof Error ? error.message : "Unknown error",
+          stack: error instanceof Error ? error.stack : undefined,
+          timestamp: new Date().toISOString(),
+        });
+
+        throw new Error(
+          error instanceof Error 
+            ? `Failed to retrieve trips: ${error.message}`
+            : "Failed to retrieve trips due to unknown error"
+        );
+      }
     }),
 }); 
