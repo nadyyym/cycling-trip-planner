@@ -6,6 +6,8 @@ import { api } from "~/trpc/react";
 import { useEffect, useMemo } from "react";
 import { useToast } from "~/hooks/use-toast";
 import { FixedSizeList as List } from "react-window";
+import { SignInModal } from "./SignInModal";
+import { useRequireAuth } from "../_hooks/useRequireAuth";
 
 interface SegmentListSidebarProps {
   segments: SegmentDTO[];
@@ -187,6 +189,10 @@ export function SegmentListSidebar({
   // Toast for user notifications
   const { toast } = useToast();
 
+  // Auth guard for save to favourites functionality
+  const { requireAuth, isModalOpen, triggerSource, onSignInSuccess, onModalClose } = 
+    useRequireAuth("sidebar-save");
+
   // Set up limit reached callback to show toast notifications
   useEffect(() => {
     setOnLimitReached((count: number, limit: number) => {
@@ -321,26 +327,35 @@ export function SegmentListSidebar({
       return;
     }
 
-    // Convert SegmentDTO to the format expected by the API
-    const segmentsToSave = selectedSegments.map((segment) => ({
-      id: segment.id,
-      name: segment.name,
-      distance: segment.distance,
-      averageGrade: segment.averageGrade,
-      polyline: segment.polyline,
-      latStart: segment.latStart,
-      lonStart: segment.lonStart,
-      latEnd: segment.latEnd,
-      lonEnd: segment.lonEnd,
-      // elevHigh and elevLow are not available in basic SegmentDTO
-      komTime: segment.komTime,
-      climbCategory: segment.climbCategory,
-      elevationGain: segment.elevationGain,
-      ascentM: segment.ascentM,
-      descentM: segment.descentM,
-    }));
+    // Wrap the actual save operation with auth guard
+    requireAuth(() => {
+      console.log("[FAVOURITE_SAVE_ATTEMPT]", {
+        segmentCount: selectedSegments.length,
+        segmentIds: selectedSegments.map(s => s.id),
+        timestamp: new Date().toISOString(),
+      });
 
-    addFavouritesMutation.mutate({ segments: segmentsToSave });
+      // Convert SegmentDTO to the format expected by the API
+      const segmentsToSave = selectedSegments.map((segment) => ({
+        id: segment.id,
+        name: segment.name,
+        distance: segment.distance,
+        averageGrade: segment.averageGrade,
+        polyline: segment.polyline,
+        latStart: segment.latStart,
+        lonStart: segment.lonStart,
+        latEnd: segment.latEnd,
+        lonEnd: segment.lonEnd,
+        // elevHigh and elevLow are not available in basic SegmentDTO
+        komTime: segment.komTime,
+        climbCategory: segment.climbCategory,
+        elevationGain: segment.elevationGain,
+        ascentM: segment.ascentM,
+        descentM: segment.descentM,
+      }));
+
+      addFavouritesMutation.mutate({ segments: segmentsToSave });
+    });
   };
 
   // Memoize the data for the virtualized list to prevent unnecessary re-renders
@@ -512,6 +527,14 @@ export function SegmentListSidebar({
           </List>
         </div>
       )}
+
+      {/* Sign-in modal for save to favourites */}
+      <SignInModal
+        isOpen={isModalOpen}
+        onClose={onModalClose}
+        triggerSource={triggerSource}
+        onSignInSuccess={onSignInSuccess}
+      />
     </div>
   );
 }
