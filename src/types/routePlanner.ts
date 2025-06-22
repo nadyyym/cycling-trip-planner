@@ -48,8 +48,12 @@ export const DayRouteSchema = z.object({
   dayNumber: z.number().int().positive(),
   /** Total distance in kilometers */
   distanceKm: z.number().positive(),
-  /** Total elevation gain in meters */
+  /** Total elevation gain in meters (legacy field for backward compatibility) */
   elevationGainM: z.number().min(0),
+  /** Total ascent in meters */
+  ascentM: z.number().min(0),
+  /** Total descent in meters */
+  descentM: z.number().min(0),
   /** Route geometry as GeoJSON LineString */
   geometry: z.object({
     type: z.literal("LineString"),
@@ -88,8 +92,12 @@ export const PlanResponseSchema = z.discriminatedUnion("ok", [
     routes: z.array(DayRouteSchema),
     /** Total trip distance in kilometers */
     totalDistanceKm: z.number().positive(),
-    /** Total trip elevation gain in meters */
+    /** Total trip elevation gain in meters (legacy field for backward compatibility) */
     totalElevationGainM: z.number().min(0),
+    /** Total trip ascent in meters */
+    totalAscentM: z.number().min(0),
+    /** Total trip descent in meters */
+    totalDescentM: z.number().min(0),
     /** Estimated total duration in minutes */
     totalDurationMinutes: z.number().positive(),
   }),

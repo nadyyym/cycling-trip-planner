@@ -12,6 +12,8 @@ export interface SegmentGeoJSONFeature {
     distance: number;
     averageGrade: number;
     elevationGain: number;
+    ascentM: number;
+    descentM: number;
     komTime?: string;
     climbCategory?: string;
   };
@@ -91,6 +93,8 @@ export function segmentsToGeoJSON(segments: SegmentDTO[]) {
         distance: segment.distance,
         averageGrade: segment.averageGrade,
         elevationGain: segment.elevationGain,
+        ascentM: segment.ascentM,
+        descentM: segment.descentM,
         komTime: segment.komTime,
         climbCategory: segment.climbCategory,
       },

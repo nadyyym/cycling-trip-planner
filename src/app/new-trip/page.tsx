@@ -160,7 +160,9 @@ function NewTripPageContent() {
         dayNumber: route.dayNumber,
         geometry: route.geometry,
         distanceKm: route.distanceKm,
-        elevationGainM: route.elevationGainM,
+        elevationGainM: route.elevationGainM, // Legacy field for backward compatibility
+        ascentM: route.ascentM,
+        descentM: route.descentM,
         segmentNames: route.segments.map((segment) => segment.name),
       }));
 
@@ -170,7 +172,9 @@ function NewTripPageContent() {
       const trip = {
         routes: tripRoutes,
         totalDistanceKm: data.totalDistanceKm,
-        totalElevationGainM: data.totalElevationGainM,
+        totalElevationGainM: data.totalElevationGainM, // Legacy field for backward compatibility
+        totalAscentM: data.totalAscentM,
+        totalDescentM: data.totalDescentM,
         startCoordinate,
       };
 

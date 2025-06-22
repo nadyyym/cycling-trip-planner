@@ -15,7 +15,9 @@ export interface TripRoute {
   dayNumber: number;
   geometry: RouteGeometry;
   distanceKm: number;
-  elevationGainM: number;
+  elevationGainM: number; // Legacy field for backward compatibility
+  ascentM: number;
+  descentM: number;
   segmentNames: string[];
 }
 
@@ -25,7 +27,9 @@ export interface TripRoute {
 export interface Trip {
   routes: TripRoute[];
   totalDistanceKm: number;
-  totalElevationGainM: number;
+  totalElevationGainM: number; // Legacy field for backward compatibility
+  totalAscentM: number;
+  totalDescentM: number;
   startCoordinate?: [number, number]; // First coordinate for map centering
 }
 

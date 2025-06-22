@@ -165,6 +165,9 @@ NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN="your-mapbox-token"
 - `lonEnd` (float)
 - `elevHigh` (float, nullable)
 - `elevLow` (float, nullable)
+- `elevationGain` (float) - legacy field for backward compatibility
+- `ascentM` (float) - ascent in meters
+- `descentM` (float) - descent in meters
 - `createdAt` (timestamp)
 
 ### Favourites
@@ -473,9 +476,30 @@ Strava tokens expire every 6 hours. Run the refresh job:
 npm run cron:start
 ```
 
+### Elevation Data Backfill
+To populate existing segments with ascent and descent values:
+```bash
+npx tsx scripts/backfillElevation.ts
+```
+
+This script processes segments in batches of 500 and:
+- Calculates bidirectional elevation from polylines when available
+- Falls back to heuristic splitting of legacy elevation gain data
+- Logs progress and handles errors gracefully
+- Can be safely re-run multiple times
+
 ## Implementation Status
 
 ### ✅ Completed Features
+- **Bidirectional Elevation System**: Complete ascent and descent tracking
+  - Database schema updated with `ascentM` and `descentM` fields for segments
+  - Elevation calculation algorithm for bidirectional metrics from polylines
+  - Updated UI components showing both ⬆️ ascent and ⬇️ descent with color coding
+  - Enhanced segment cards, route summaries, and trip totals with dual elevation
+  - GPX exports include ascent/descent in descriptions for Garmin Connect
+  - Hover-to-select and card-click-to-select functionality for segments
+  - Clear button replaced with 🗑️ icon for better UX
+  - Backfill script for populating existing data with elevation values
 - **Favourites System**: Complete user favourite segments management
   - Database schema with favourites table (composite PK: userId, segmentId)
   - tRPC API with addMany, remove, getMyFavourites, count procedures

@@ -109,17 +109,17 @@ export function SegmentListSidebar({
 
   const handleCardHover = (segmentId: string | null) => {
     highlightSegment(segmentId);
+    
+    // Hover also toggles selection (per PRD requirement)
+    if (segmentId) {
+      toggleSegmentSelection(segmentId, "hover");
+    }
   };
 
   const handleCardClick = (segmentId: string) => {
-    // =============================================
-    // STEP 2 – Disable Zoom-to-Segment on Click
-    // Default click no longer zooms to maintain helicopter view.
-    // Users can still zoom via the explicit map icon button.
-    // =============================================
-    console.log("[SEGMENT_CARD_CLICK_NO_ZOOM]", { segmentId });
-    // No automatic zoom - just highlight the segment
-    highlightSegment(segmentId);
+    // Card click now toggles selection (per PRD requirement)
+    console.log("[SEGMENT_CARD_CLICK_SELECT]", { segmentId });
+    toggleSegmentSelection(segmentId, "card");
   };
 
   const handleZoomToSegment = (segmentId: string, event: React.MouseEvent) => {
@@ -133,7 +133,7 @@ export function SegmentListSidebar({
   };
 
   const handleCheckboxChange = (segmentId: string) => {
-    toggleSegmentSelection(segmentId);
+    toggleSegmentSelection(segmentId, "checkbox");
   };
 
   const handleAddFavourites = () => {
@@ -161,6 +161,8 @@ export function SegmentListSidebar({
       komTime: segment.komTime,
       climbCategory: segment.climbCategory,
       elevationGain: segment.elevationGain,
+      ascentM: segment.ascentM,
+      descentM: segment.descentM,
     }));
 
     addFavouritesMutation.mutate({ segments: segmentsToSave });
@@ -208,8 +210,9 @@ export function SegmentListSidebar({
                   <button
                     onClick={clearSelection}
                     className="rounded-md border border-blue-200 px-2 py-1 text-xs text-blue-700 hover:bg-blue-100"
+                    title="Clear selection"
                   >
-                    Clear
+                    🗑️
                   </button>
                   <button
                     onClick={handleAddFavourites}
@@ -369,10 +372,19 @@ export function SegmentListSidebar({
                           <span className="flex items-center gap-1">
                             📏 {(segment.distance / 1000).toFixed(1)} km
                           </span>
-                          {segment.elevationGain > 0 && (
-                            <span className="flex items-center gap-1">
-                              ⛰️ {Math.round(segment.elevationGain)}m
-                            </span>
+                          {(segment.ascentM > 0 || segment.descentM > 0) && (
+                            <>
+                              {segment.ascentM > 0 && (
+                                <span className="flex items-center gap-1 text-orange-600">
+                                  ⬆️ {segment.ascentM}m
+                                </span>
+                              )}
+                              {segment.descentM > 0 && (
+                                <span className="flex items-center gap-1 text-sky-500">
+                                  ⬇️ {segment.descentM}m
+                                </span>
+                              )}
+                            </>
                           )}
                         </div>
 

@@ -137,7 +137,9 @@ export const segments = createTable(
     elevLow: real(), // nullable until fetched
     komTime: varchar({ length: 50 }), // KOM time as string (e.g., "12:34")
     climbCategory: varchar({ length: 10 }), // HC, 1, 2, 3, 4, or null
-    elevationGain: real(), // in meters
+    elevationGain: real(), // in meters (legacy field, kept for backward compatibility)
+    ascentM: real().notNull().default(0), // ascent in meters
+    descentM: real().notNull().default(0), // descent in meters
     createdAt: d
       .timestamp({ withTimezone: true })
       .default(sql`CURRENT_TIMESTAMP`)

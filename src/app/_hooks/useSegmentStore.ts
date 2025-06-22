@@ -9,7 +9,7 @@ export interface SegmentStore {
 
   // Actions
   highlightSegment: (segmentId: string | null) => void;
-  toggleSegmentSelection: (segmentId: string) => void;
+  toggleSegmentSelection: (segmentId: string, source?: "checkbox" | "card" | "hover") => void;
   clearSelection: () => void;
   setSelectedSegments: (segmentIds: string[]) => void;
 
@@ -31,14 +31,26 @@ export const useSegmentStore = create<SegmentStore>((set, _get) => ({
     set({ highlightedSegmentId: segmentId });
   },
 
-  toggleSegmentSelection: (segmentId: string) => {
+  toggleSegmentSelection: (segmentId: string, source: "checkbox" | "card" | "hover" = "checkbox") => {
     set((state) => {
       const newSelectedIds = new Set(state.selectedSegmentIds);
-      if (newSelectedIds.has(segmentId)) {
+      const wasSelected = newSelectedIds.has(segmentId);
+      
+      if (wasSelected) {
         newSelectedIds.delete(segmentId);
       } else {
         newSelectedIds.add(segmentId);
       }
+
+      // Log the selection event for analytics
+      console.log(`[SEGMENT_TOGGLE]`, {
+        segmentId,
+        source,
+        selected: !wasSelected,
+        totalSelected: newSelectedIds.size,
+        timestamp: new Date().toISOString(),
+      });
+
       return { selectedSegmentIds: newSelectedIds };
     });
   },

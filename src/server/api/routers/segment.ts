@@ -23,6 +23,8 @@ const saveSegmentsSchema = z.object({
       komTime: z.string().optional(),
       climbCategory: z.string().optional(),
       elevationGain: z.number().optional(),
+      ascentM: z.number().optional(),
+      descentM: z.number().optional(),
     }),
   ),
 });
@@ -109,6 +111,8 @@ export const segmentRouter = createTRPCRouter({
             komTime: segment.komTime ?? null,
             climbCategory: segment.climbCategory ?? null,
             elevationGain: segment.elevationGain ?? null,
+            ascentM: segment.ascentM ?? 0,
+            descentM: segment.descentM ?? 0,
           }));
 
           // Insert new segments
@@ -270,7 +274,9 @@ export const segmentRouter = createTRPCRouter({
         polyline: segment.polyline ?? undefined,
         komTime: segment.komTime ?? undefined,
         climbCategory: segment.climbCategory ?? undefined,
-        elevationGain: segment.elevationGain ?? 0,
+                  elevationGain: segment.elevationGain ?? 0,
+          ascentM: segment.ascentM ?? 0,
+          descentM: segment.descentM ?? 0,
       }));
 
       const duration = Date.now() - startTime;

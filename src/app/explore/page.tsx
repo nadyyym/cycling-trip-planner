@@ -87,6 +87,8 @@ export default function ExplorePage() {
       distance: number;
       averageGrade: number;
       elevationGain: number;
+      ascentM: number;
+      descentM: number;
     } | null;
   }>({
     visible: false,
@@ -306,12 +308,19 @@ export default function ExplorePage() {
       if (map.current) {
         try {
           console.log("Cleaning up map");
-          map.current.remove();
+          // Check if map is still loaded before attempting to remove
+          if (map.current.isStyleLoaded && map.current.isStyleLoaded()) {
+            map.current.remove();
+          } else {
+            // If style isn't loaded, force remove without waiting
+            map.current.getCanvas()?.remove();
+          }
         } catch (error) {
-          console.warn("Error removing map:", error);
+          console.warn("Error removing map (this is usually harmless during development):", error);
+        } finally {
+          map.current = null;
+          mapInitialized.current = false;
         }
-        map.current = null;
-        mapInitialized.current = false;
       }
     };
   }, [lat, lng, zoom]); // Include coordinates but handle them carefully to avoid excessive re-renders
@@ -402,6 +411,8 @@ export default function ExplorePage() {
             distance: Number(properties.distance),
             averageGrade: Number(properties.averageGrade),
             elevationGain: Number(properties.elevationGain),
+            ascentM: Number(properties.ascentM),
+            descentM: Number(properties.descentM),
           },
         });
 
@@ -880,12 +891,23 @@ export default function ExplorePage() {
                         📈 {mapTooltip.segment.averageGrade.toFixed(1)}%
                       </span>
                     </div>
-                    {mapTooltip.segment.elevationGain > 0 && (
-                      <p className="text-xs">
-                        ⛰️ {Math.round(mapTooltip.segment.elevationGain)}m
-                        elevation
-                      </p>
-                    )}
+                    <div className="flex items-center gap-3 text-xs">
+                      {mapTooltip.segment.ascentM > 0 && (
+                        <span className="text-orange-300">
+                          ⬆️ {Math.round(mapTooltip.segment.ascentM)}m
+                        </span>
+                      )}
+                      {mapTooltip.segment.descentM > 0 && (
+                        <span className="text-blue-300">
+                          ⬇️ {Math.round(mapTooltip.segment.descentM)}m
+                        </span>
+                      )}
+                      {mapTooltip.segment.elevationGain > 0 && (
+                        <span className="text-gray-300">
+                          ⛰️ {Math.round(mapTooltip.segment.elevationGain)}m
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}

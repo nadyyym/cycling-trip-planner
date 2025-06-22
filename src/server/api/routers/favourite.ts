@@ -23,6 +23,8 @@ const addManySchema = z.object({
       komTime: z.string().optional(),
       climbCategory: z.string().optional(),
       elevationGain: z.number().optional(),
+      ascentM: z.number().optional(),
+      descentM: z.number().optional(),
     }),
   ),
 });
@@ -67,7 +69,9 @@ export const favouriteRouter = createTRPCRouter({
           elevLow: segment.elevLow ?? null,
           komTime: segment.komTime ?? null,
           climbCategory: segment.climbCategory ?? null,
-          elevationGain: segment.elevationGain ?? null,
+                      elevationGain: segment.elevationGain ?? null,
+            ascentM: segment.ascentM ?? 0,
+            descentM: segment.descentM ?? 0,
         }));
 
         // Insert segments (ignore conflicts)
@@ -221,6 +225,8 @@ export const favouriteRouter = createTRPCRouter({
           komTime: segments.komTime,
           climbCategory: segments.climbCategory,
           elevationGain: segments.elevationGain,
+        ascentM: segments.ascentM,
+        descentM: segments.descentM,
           elevHigh: segments.elevHigh,
           elevLow: segments.elevLow,
         })
@@ -241,7 +247,9 @@ export const favouriteRouter = createTRPCRouter({
         polyline: row.polyline ?? undefined,
         komTime: row.komTime ?? undefined,
         climbCategory: row.climbCategory ?? undefined,
-        elevationGain: row.elevationGain ?? 0,
+                  elevationGain: row.elevationGain ?? 0,
+          ascentM: row.ascentM ?? 0,
+          descentM: row.descentM ?? 0,
         elevHigh: row.elevHigh ?? undefined,
         elevLow: row.elevLow ?? undefined,
         favouriteCreatedAt: row.createdAt,

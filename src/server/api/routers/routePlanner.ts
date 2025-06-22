@@ -9,6 +9,7 @@ import {
   type CostMatrix,
   ExternalApiError,
 } from "~/server/integrations/mapbox";
+import { calculateBidirectionalElevation } from "~/server/algorithms/elevation";
 import { accounts } from "~/server/db/schema";
 import { eq } from "drizzle-orm";
 import { solveOrderedSegments, TSPSolverError } from "~/server/algorithms/tsp";
@@ -641,9 +642,9 @@ export const routePlannerRouter = createTRPCRouter({
                   partition.segmentIndices,
                 );
 
-                // Calculate elevation gain from the actual route geometry coordinates
-                const calculatedElevationGain = await calculateElevationFromCoordinates(
-                  dayGeometry.coordinates
+                // Calculate bidirectional elevation from the actual route geometry coordinates
+                const elevationResult = calculateBidirectionalElevation(
+                  dayGeometry.coordinates.map(coord => [coord[0], coord[1], undefined]) // Add elevation placeholder
                 );
 
                 console.log(`[ROUTE_PLANNER_DAY_GEOMETRY]`, {
@@ -653,14 +654,17 @@ export const routePlannerRouter = createTRPCRouter({
                   coordinateCount: dayGeometry.coordinates.length,
                   distanceKm: partition.distanceKm,
                   partitionElevationGainM: partition.elevationGainM,
-                  calculatedElevationGainM: Math.round(calculatedElevationGain),
+                  calculatedAscentM: elevationResult.ascentM,
+                  calculatedDescentM: elevationResult.descentM,
                   segmentDetails: segments.map((s) => ({ id: s.id, name: s.name })),
                 });
 
                 return {
                   dayNumber: partition.dayNumber,
                   distanceKm: partition.distanceKm,
-                  elevationGainM: calculatedElevationGain, // Use calculated elevation from geometry
+                  elevationGainM: elevationResult.ascentM, // Use ascent for backward compatibility
+                  ascentM: elevationResult.ascentM,
+                  descentM: elevationResult.descentM,
                   geometry: dayGeometry,
                   segments,
                   segmentsVisited, // Keep for backwards compatibility
@@ -676,6 +680,14 @@ export const routePlannerRouter = createTRPCRouter({
             );
             const totalElevationGainM = routes.reduce(
               (sum, route) => sum + route.elevationGainM,
+              0,
+            );
+            const totalAscentM = routes.reduce(
+              (sum, route) => sum + route.ascentM,
+              0,
+            );
+            const totalDescentM = routes.reduce(
+              (sum, route) => sum + route.descentM,
               0,
             );
             const totalDurationMinutes = routes.reduce(
@@ -708,6 +720,8 @@ export const routePlannerRouter = createTRPCRouter({
               routes,
               totalDistanceKm,
               totalElevationGainM,
+              totalAscentM,
+              totalDescentM,
               totalDurationMinutes,
             };
           } catch (partitionError) {

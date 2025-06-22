@@ -1,4 +1,5 @@
 import { TRPCError } from "@trpc/server";
+import { calculateElevationFromPolyline } from "~/server/algorithms/elevation";
 
 // Types for Strava API responses
 interface StravaSegmentExploreResponse {
@@ -73,7 +74,9 @@ export interface SegmentDTO {
   polyline?: string; // encoded polyline for full geometry
   komTime?: string; // formatted as "mm:ss"
   climbCategory?: string; // "HC", "1", "2", "3", "4"
-  elevationGain: number; // in meters
+  elevationGain: number; // in meters (legacy field, kept for backward compatibility)
+  ascentM: number; // ascent in meters
+  descentM: number; // descent in meters
 }
 
 export interface SegmentDetailDTO extends SegmentDTO {
@@ -370,6 +373,9 @@ export class StravaClient {
               `/segments/${segment.id}`,
             );
 
+          // Calculate bidirectional elevation from polyline
+          const elevationResult = calculateElevationFromPolyline(detailData.map.polyline);
+
           segments.push({
             id: segment.id.toString(),
             name: segment.name,
@@ -385,6 +391,8 @@ export class StravaClient {
               : undefined,
             climbCategory: formatClimbCategory(segment.climb_category),
             elevationGain: Math.max(0, segment.elev_difference ?? 0), // Ensure valid number, minimum 0
+            ascentM: elevationResult.ascentM,
+            descentM: elevationResult.descentM,
           });
 
           successCount++;
@@ -411,6 +419,13 @@ export class StravaClient {
           });
 
           // Fall back to basic segment without polyline
+          // Use heuristic elevation calculation based on segment data
+          const elevationGain = Math.max(0, segment.elev_difference ?? 0);
+          const elevationResult = {
+            ascentM: Math.round(elevationGain * 0.6), // Assume most elevation change is ascent
+            descentM: Math.round(elevationGain * 0.4), // Some descent for balance
+          };
+
           segments.push({
             id: segment.id.toString(),
             name: segment.name,
@@ -425,7 +440,9 @@ export class StravaClient {
               ? formatTime(segment.kom_time)
               : undefined,
             climbCategory: formatClimbCategory(segment.climb_category),
-            elevationGain: Math.max(0, segment.elev_difference ?? 0), // Ensure valid number, minimum 0
+            elevationGain: elevationGain,
+            ascentM: elevationResult.ascentM,
+            descentM: elevationResult.descentM,
           });
         }
       }
@@ -481,6 +498,9 @@ export class StravaClient {
 
       const detailDuration = Date.now() - detailStart;
 
+      // Calculate bidirectional elevation from polyline
+      const elevationResult = calculateElevationFromPolyline(data.map.polyline);
+
       const result = {
         id: data.id.toString(),
         name: data.name,
@@ -496,6 +516,8 @@ export class StravaClient {
         komTime: data.kom ? formatTime(data.kom.elapsed_time) : undefined,
         climbCategory: formatClimbCategory(data.climb_category),
         elevationGain: Math.max(0, data.elev_difference ?? 0), // Ensure valid number, minimum 0
+        ascentM: elevationResult.ascentM,
+        descentM: elevationResult.descentM,
       };
 
       console.log(`[STRAVA_GET_SEGMENT_DETAIL_SUCCESS]`, {
@@ -606,20 +628,27 @@ export class StravaClient {
       });
 
       // Convert starred segments to our SegmentDTO format
-      const segments: SegmentDTO[] = data.map((segment) => ({
-        id: segment.id.toString(),
-        name: segment.name,
-        distance: segment.distance,
-        averageGrade: segment.average_grade,
-        latStart: segment.start_latlng[0],
-        lonStart: segment.start_latlng[1],
-        latEnd: segment.end_latlng[0],
-        lonEnd: segment.end_latlng[1],
-        polyline: segment.map.polyline, // Starred segments include full details
-        komTime: segment.kom ? formatTime(segment.kom.elapsed_time) : undefined,
-        climbCategory: formatClimbCategory(segment.climb_category),
-        elevationGain: Math.max(0, segment.elev_difference ?? 0), // Ensure valid number, minimum 0
-      }));
+      const segments: SegmentDTO[] = data.map((segment) => {
+        // Calculate bidirectional elevation from polyline
+        const elevationResult = calculateElevationFromPolyline(segment.map.polyline);
+        
+        return {
+          id: segment.id.toString(),
+          name: segment.name,
+          distance: segment.distance,
+          averageGrade: segment.average_grade,
+          latStart: segment.start_latlng[0],
+          lonStart: segment.start_latlng[1],
+          latEnd: segment.end_latlng[0],
+          lonEnd: segment.end_latlng[1],
+          polyline: segment.map.polyline, // Starred segments include full details
+          komTime: segment.kom ? formatTime(segment.kom.elapsed_time) : undefined,
+          climbCategory: formatClimbCategory(segment.climb_category),
+          elevationGain: Math.max(0, segment.elev_difference ?? 0), // Ensure valid number, minimum 0
+          ascentM: elevationResult.ascentM,
+          descentM: elevationResult.descentM,
+        };
+      });
 
       const starredDuration = Date.now() - starredStart;
 

@@ -7,8 +7,8 @@ import {
   type BoundsInput,
   type SegmentDTO,
 } from "~/server/integrations/strava";
-import { accounts } from "~/server/db/schema";
-import { eq } from "drizzle-orm";
+import { accounts, segments } from "~/server/db/schema";
+import { eq, inArray, sql, and, gte } from "drizzle-orm";
 import { segmentExploreCache, LRUCache } from "~/server/cache/lru";
 
 // Input validation schemas
@@ -137,29 +137,172 @@ export const stravaRouter = createTRPCRouter({
           },
         );
 
-        // Explore segments using Strava API
+        // First, try to get segments from our database within the bounds
+        const dbSearchStart = Date.now();
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        
+        // Query segments within bounds that are less than 7 days old
+        const dbSegments = await ctx.db
+          .select()
+          .from(segments)
+          .where(
+            and(
+              gte(segments.latStart, input.sw[0]), // lat >= sw.lat
+              sql`${segments.latStart} <= ${input.ne[0]}`, // lat <= ne.lat
+              gte(segments.lonStart, input.sw[1]), // lng >= sw.lng  
+              sql`${segments.lonStart} <= ${input.ne[1]}`, // lng <= ne.lng
+              gte(segments.createdAt, sevenDaysAgo) // created within last 7 days
+            )
+          );
+        
+        const dbSearchDuration = Date.now() - dbSearchStart;
+
+        console.log(`[STRAVA_SEGMENT_DB_SEARCH]`, {
+          userId,
+          cacheKey,
+          duration: `${dbSearchDuration}ms`,
+          dbSegmentCount: dbSegments.length,
+          sevenDaysAgo: sevenDaysAgo.toISOString(),
+          boundsQuery: {
+            latRange: [input.sw[0], input.ne[0]],
+            lngRange: [input.sw[1], input.ne[1]]
+          },
+          timestamp: new Date().toISOString(),
+        });
+
+        // If we have recent segments in our database, use them
+        if (dbSegments.length > 0) {
+          const dbSegmentDTOs: SegmentDTO[] = dbSegments.map((segment) => ({
+            id: segment.id.toString(),
+            name: segment.name,
+            distance: segment.distance,
+            averageGrade: segment.averageGrade,
+            latStart: segment.latStart,
+            lonStart: segment.lonStart,
+            latEnd: segment.latEnd,
+            lonEnd: segment.lonEnd,
+            polyline: segment.polyline ?? undefined,
+            komTime: segment.komTime ?? undefined,
+            climbCategory: segment.climbCategory ?? undefined,
+            elevationGain: segment.elevationGain ?? 0,
+            ascentM: segment.ascentM ?? 0,
+            descentM: segment.descentM ?? 0,
+          }));
+
+          // Store in memory cache as well
+          segmentExploreCache.set(cacheKey, dbSegmentDTOs);
+
+          const totalDuration = Date.now() - startTime;
+
+          console.log(`[STRAVA_SEGMENT_EXPLORE_DB_SUCCESS]`, {
+            userId,
+            cacheKey,
+            segmentCount: dbSegmentDTOs.length,
+            dbSearchDuration: `${dbSearchDuration}ms`,
+            totalDuration: `${totalDuration}ms`,
+            source: "database",
+            cacheStored: true,
+            timestamp: new Date().toISOString(),
+          });
+
+          return dbSegmentDTOs;
+        }
+
+        // If no recent segments in database, fetch from Strava API
+        console.log(`[STRAVA_SEGMENT_FETCH_FROM_API]`, {
+          userId,
+          cacheKey,
+          reason: "No recent segments in database",
+          timestamp: new Date().toISOString(),
+        });
+
         const apiStart = Date.now();
-        const segments = await stravaClient.exploreSegments(
+        const stravaSegments = await stravaClient.exploreSegments(
           input as BoundsInput,
         );
         const apiDuration = Date.now() - apiStart;
 
-        // Store result in cache
-        segmentExploreCache.set(cacheKey, segments);
+        // Save segments to database for future use
+        if (stravaSegments.length > 0) {
+          const dbSaveStart = Date.now();
+          
+          try {
+            // Check which segments already exist to avoid duplicates
+            const existingSegmentIds = await ctx.db
+              .select({ id: segments.id })
+              .from(segments)
+              .where(
+                inArray(
+                  segments.id,
+                  stravaSegments.map((s) => BigInt(s.id))
+                )
+              );
+            
+            const existingIds = new Set(existingSegmentIds.map(s => s.id.toString()));
+            const segmentsToSave = stravaSegments.filter(s => !existingIds.has(s.id));
+
+            if (segmentsToSave.length > 0) {
+              const segmentData = segmentsToSave.map((segment) => ({
+                id: BigInt(segment.id),
+                name: segment.name,
+                distance: segment.distance,
+                averageGrade: segment.averageGrade,
+                polyline: segment.polyline ?? null,
+                latStart: segment.latStart,
+                lonStart: segment.lonStart,
+                latEnd: segment.latEnd,
+                lonEnd: segment.lonEnd,
+                elevHigh: null, // Will be populated later if needed
+                elevLow: null, // Will be populated later if needed
+                komTime: segment.komTime ?? null,
+                climbCategory: segment.climbCategory ?? null,
+                elevationGain: segment.elevationGain ?? 0,
+                ascentM: segment.ascentM ?? 0,
+                descentM: segment.descentM ?? 0,
+              }));
+
+              await ctx.db.insert(segments).values(segmentData);
+            }
+
+            const dbSaveDuration = Date.now() - dbSaveStart;
+
+            console.log(`[STRAVA_SEGMENT_DB_SAVE]`, {
+              userId,
+              cacheKey,
+              duration: `${dbSaveDuration}ms`,
+              totalSegments: stravaSegments.length,
+              existingSegments: existingIds.size,
+              savedSegments: segmentsToSave.length,
+              timestamp: new Date().toISOString(),
+            });
+          } catch (dbError) {
+            console.warn(`[STRAVA_SEGMENT_DB_SAVE_ERROR]`, {
+              userId,
+              cacheKey,
+              error: dbError instanceof Error ? dbError.message : "Unknown error",
+              message: "Failed to save segments to database, continuing with API result",
+              timestamp: new Date().toISOString(),
+            });
+          }
+        }
+
+        // Store result in memory cache
+        segmentExploreCache.set(cacheKey, stravaSegments);
 
         const totalDuration = Date.now() - startTime;
 
         console.log(`[STRAVA_SEGMENT_EXPLORE_SUCCESS]`, {
           userId,
           cacheKey,
-          segmentCount: segments.length,
+          segmentCount: stravaSegments.length,
           apiDuration: `${apiDuration}ms`,
           totalDuration: `${totalDuration}ms`,
+          source: "strava_api",
           cacheStored: true,
           timestamp: new Date().toISOString(),
         });
 
-        return segments;
+        return stravaSegments;
       } catch (error) {
         const duration = Date.now() - startTime;
 

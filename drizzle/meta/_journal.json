@@ -36,6 +36,13 @@
       "when": 1750542738549,
       "tag": "0004_lethal_blue_shield",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1750589363610,
+      "tag": "0005_magenta_gambit",
+      "breakpoints": true
     }
   ]
 }

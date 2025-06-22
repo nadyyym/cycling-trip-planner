@@ -8,7 +8,9 @@ export interface RouteForGPX {
     coordinates: [number, number][];
   };
   distanceKm: number;
-  elevationGainM: number;
+  elevationGainM: number; // Legacy field for backward compatibility
+  ascentM: number;
+  descentM: number;
   segmentNames: string[];
 }
 
@@ -30,7 +32,7 @@ export function generateGPX(route: RouteForGPX, fileName: string): string {
      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <metadata>
     <name>${fileName}</name>
-    <desc>Cycling route for Day ${route.dayNumber} - Distance: ${Math.round(route.distanceKm)}km, Elevation: ${Math.round(route.elevationGainM)}m</desc>
+    <desc>Cycling route for Day ${route.dayNumber} - Distance: ${Math.round(route.distanceKm)}km, Ascent: ${Math.round(route.ascentM)}m, Descent: ${Math.round(route.descentM)}m</desc>
     <author>
       <name>Cycling Trip Planner</name>
     </author>
@@ -122,6 +124,8 @@ export async function downloadRoutesAsZip(routes: RouteForGPX[]): Promise<void> 
           coordinateCount: route.geometry.coordinates.length,
           distanceKm: Math.round(route.distanceKm),
           elevationGainM: Math.round(route.elevationGainM),
+          ascentM: Math.round(route.ascentM),
+          descentM: Math.round(route.descentM),
         });
       } catch (error) {
         console.error(`[GPX_ERROR] Failed to generate GPX for Day ${route.dayNumber}:`, error);
