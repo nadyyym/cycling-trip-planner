@@ -1,6 +1,7 @@
 import { api } from "~/trpc/react";
 import { useToast } from "~/hooks/use-toast";
 import { useCallback } from "react";
+import { type SaveTripInput } from "~/lib/tripUtils";
 
 /**
  * Input for trip planning from UI perspective
@@ -20,74 +21,15 @@ export interface TripPlanInput {
 }
 
 /**
- * Custom hook for trip planning with optimistic mutations
- * Handles the complete trip planning workflow including error management and trip saving
+ * Custom hook for trip planning with explicit save functionality
+ * Handles the complete trip planning workflow including error management and manual trip saving
  */
 export function useTripPlanner() {
   const { toast } = useToast();
   const saveMutation = api.trip.save.useMutation();
   
-  // Plan mutation with onSuccess callback to automatically save
-  const planMutation = api.routePlanner.planTrip.useMutation({
-    onSuccess: (data) => {
-      if (data?.ok) {
-        // Automatically save the trip after successful planning
-        console.log("[TRIP_PLANNER_AUTO_SAVE]", {
-          routeCount: data.routes.length,
-          totalDistanceKm: data.totalDistanceKm,
-          timestamp: new Date().toISOString(),
-        });
-        
-                 // Trigger save mutation
-         const saveData = {
-           constraints: {
-             startDate: data.constraints?.startDate ?? new Date().toISOString().split('T')[0]!,
-             endDate: data.constraints?.endDate ?? new Date().toISOString().split('T')[0]!,
-             maxDailyDistanceKm: data.constraints?.maxDailyDistanceKm ?? 100,
-             maxDailyElevationM: data.constraints?.maxDailyElevationM ?? 1000,
-           },
-          routes: data.routes.map((route: {
-            dayNumber: number;
-            distanceKm: number;
-            elevationGainM: number;
-            geometry: {
-              type: "LineString";
-              coordinates: [number, number][];
-            };
-            segments?: Array<{ id: number; name: string; stravaUrl: string }>;
-            durationMinutes: number;
-          }) => ({
-            dayNumber: route.dayNumber,
-            distanceKm: route.distanceKm,
-            elevationGainM: route.elevationGainM,
-            geometry: route.geometry,
-            segmentsVisited: route.segments?.map((s) => s.id) ?? [],
-            durationMinutes: route.durationMinutes,
-            segments: route.segments,
-          })),
-          totalDistanceKm: data.totalDistanceKm,
-          totalElevationGainM: data.totalElevationGainM,
-          totalDurationMinutes: data.totalDurationMinutes,
-        };
-        
-        saveMutation.mutate(saveData, {
-          onSuccess: (saveResult) => {
-            toast({
-              title: "Trip saved successfully!",
-              description: `Your ${saveResult.days.length}-day cycling trip has been saved and is ready to share.`,
-            });
-          },
-          onError: (error) => {
-            toast({
-              title: "Failed to save trip",
-              description: error instanceof Error ? error.message : "An unexpected error occurred",
-              variant: "destructive",
-            });
-          },
-        });
-      }
-    },
-  });
+  // Plan mutation without auto-saving
+  const planMutation = api.routePlanner.planTrip.useMutation();
 
   const planTrip = useCallback((input: TripPlanInput) => {
     console.log("[TRIP_PLANNER_START]", {
@@ -116,7 +58,43 @@ export function useTripPlanner() {
     });
   }, [planMutation]);
 
+  const saveTrip = useCallback((saveInput: SaveTripInput) => {
+    console.log("[TRIP_PLANNER_SAVE_START]", {
+      routeCount: saveInput.routes.length,
+      totalDistanceKm: saveInput.totalDistanceKm,
+      constraints: saveInput.constraints,
+      timestamp: new Date().toISOString(),
+    });
 
+    return saveMutation.mutate(saveInput, {
+      onSuccess: (saveResult) => {
+        console.log("[TRIP_PLANNER_SAVE_SUCCESS]", {
+          slug: saveResult.slug,
+          shareUrl: saveResult.shareUrl,
+          dayCount: saveResult.days.length,
+          timestamp: new Date().toISOString(),
+        });
+
+        toast({
+          title: "🚴 Trip saved successfully!",
+          description: `Your ${saveResult.days.length}-day cycling trip is now public and ready to share.`,
+          variant: "default",
+        });
+      },
+      onError: (error) => {
+        console.error("[TRIP_PLANNER_SAVE_ERROR]", {
+          error: error instanceof Error ? error.message : "Unknown error",
+          timestamp: new Date().toISOString(),
+        });
+
+        toast({
+          title: "❌ Failed to save trip",
+          description: error instanceof Error ? error.message : "An unexpected error occurred",
+          variant: "destructive",
+        });
+      },
+    });
+  }, [saveMutation, toast]);
 
   return {
     // Planning state
@@ -134,6 +112,7 @@ export function useTripPlanner() {
     
     // Actions
     planTrip,
+    saveTrip,
     reset: () => {
       planMutation.reset();
       saveMutation.reset();

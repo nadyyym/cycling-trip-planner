@@ -103,9 +103,9 @@ function planErrorToMarkdown(data: { ok: false; error: string; details: string }
       break;
     case "needMoreDays":
       lines.push("## 📅 Need More Days");
-      lines.push("**Problem:** The selected segments require more than 4 days to complete safely.");
+      lines.push("**Problem:** The selected segments require more than 7 days to complete safely.");
       
-      lines.push("**What this means:** There are too many segments to fit within the maximum 4-day limit.");
+      lines.push("**What this means:** There are too many segments to fit within the maximum 7-day limit.");
       
       lines.push("**Solutions:**");
       lines.push("- Select fewer segments");
@@ -312,9 +312,9 @@ export function TripPlanModal({
       } else if (error.message.includes("daily limit") || error.message.includes("100 km") || error.message.includes("1000 m")) {
         errorTitle = "Daily Limit Exceeded";
         errorDescription = "One day would exceed 100 km distance or 1000 m elevation gain. Try removing a segment.";
-      } else if (error.message.includes("need more days") || error.message.includes("4 days")) {
+      } else if (error.message.includes("need more days") || error.message.includes("7 days")) {
         errorTitle = "Need More Days";
-        errorDescription = "The selected segments require more than 4 days. Consider removing some segments.";
+        errorDescription = "The selected segments require more than 7 days. Consider removing some segments.";
       } else if (error.message.includes("too far") || error.message.includes("distance")) {
         errorTitle = "Segments Too Far Apart";
         errorDescription = "The selected segments are too far apart to route efficiently. Try selecting closer segments.";

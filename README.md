@@ -207,6 +207,23 @@ PUBLIC_TRIP_BASE_URL="http://localhost:3000" # Base URL for shareable trip links
 - `geometryS3Key` (text, nullable) - S3 key for compressed GeoJSON of full geometry (future use)
 - `slug` (varchar, unique) - SEO-friendly unique identifier for shareable URLs
 
+## Complete User Flow: Explore → Plan → Save → Share
+
+The cycling trip planner provides a seamless end-to-end experience:
+
+1. **🗺️ Explore Segments** (`/explore`): Browse and select cycling segments on an interactive map
+2. **📅 Plan Trip** (`/new-trip`): Generate optimized multi-day routes with custom constraints
+3. **💾 Save Itinerary**: One-click save creates a public, shareable trip URL
+4. **📋 Manage Trips** (`/itineraries`): View and organize all your saved cycling adventures
+5. **🔗 Share & Discover** (`/trip/[slug]`): Public trip pages for sharing with the community
+
+### Key Benefits
+- **Public by Default**: All saved itineraries are instantly shareable with unique URLs
+- **Up to 7 Days**: Plan week-long cycling adventures with intelligent daily partitioning
+- **Smart Optimization**: TSP algorithms minimize travel time between segments
+- **Real Geometry**: Actual cycling routes using Mapbox Directions API
+- **Export Ready**: Download GPX files for your GPS device
+
 ## Features
 
 ### Route Planning API
@@ -216,7 +233,7 @@ The route planner takes a set of Strava segments and creates optimized multi-day
 - **Realistic Route Geometry**: Stitches together actual cycling routes using Mapbox Directions API
 - **Elevation-Aware Planning**: Incorporates real elevation data for accurate difficulty assessment
 - **Daily Constraints**: Ensures each day is 0-100km with ≤1000m elevation gain
-- **Multi-Day Optimization**: Distributes segments across up to 4 days for balanced trips
+- **Multi-Day Optimization**: Distributes segments across up to 7 days for balanced trips
 
 **API Endpoint**: `POST /api/trpc/routePlanner.planTrip`
 
@@ -227,7 +244,10 @@ The route planner takes a set of Strava segments and creates optimized multi-day
     segmentId: number;
     forwardDirection: boolean;
   }>;
-  maxDays: number; // 1-4
+  startDate: string; // YYYY-MM-DD format
+  endDate: string; // YYYY-MM-DD format
+  maxDailyDistanceKm: number; // 20-300km, default 100
+  maxDailyElevationM: number; // 200-5000m, default 1000
   tripStart?: [longitude, latitude]; // Optional starting point
 }
 ```
@@ -261,7 +281,8 @@ The route planner takes a set of Strava segments and creates optimized multi-day
 
 **Error Types**:
 - `dailyLimitExceeded`: Single segment exceeds daily distance (100km) or elevation (1000m) limits
-- `needMoreDays`: Route cannot fit within maximum 4 days due to constraints
+- `customLimitExceeded`: Segments exceed user's custom daily limits
+- `needMoreDays`: Route cannot fit within maximum 7 days due to constraints
 - `segmentTooFar`: Segments too far apart, routing optimization failed, or too many waypoints (>25)
 - `externalApi`: Mapbox/Strava API errors, network issues, or invalid API responses
 
@@ -282,14 +303,16 @@ The trip planning feature allows users to create multi-day cycling itineraries f
 4. **Results Display**: View results on dedicated `/new-trip` page with:
    - Route-focused sidebar showing daily breakdowns
    - Day-by-day cards with distance, elevation, and segment previews
-   - Expandable detailed Markdown itinerary with Strava links
-   - Copy-to-clipboard functionality for sharing
-5. **Map Visualization**: Planned routes display on full-screen map with:
+   - **Save Itinerary**: One-click save to create public, shareable trip URLs
+   - GPX download and clipboard copy functionality
+5. **Save & Share**: After planning, save your itinerary to:
+   - Generate a unique, SEO-friendly public URL (`/trip/[slug]`)
+   - Share with friends and cycling communities
+   - Access from your personal itineraries dashboard
+6. **Map Visualization**: Planned routes display on full-screen map with:
    - **Enhanced Color-Coded Daily Routes**: Each day gets a distinct color for easy identification
-     - Day 1: Blue (#6366f1)
-     - Day 2: Green (#10b981) 
-     - Day 3: Orange (#f97316)
-     - Day 4: Pink (#ec4899)
+     - Day 1: Blue (#6366f1), Day 2: Green (#10b981), Day 3: Orange (#f97316)
+     - Day 4: Pink (#ec4899), Day 5: Purple (#8b5cf6), Day 6: Teal (#14b8a6), Day 7: Rose (#f43f5e)
    - **Color Legend**: Clear visual guide showing day-color mapping
    - **Enhanced Tooltips**: Hover tooltips with color indicators and highlighted distance
    - **Color-Coordinated Markers**: Start/end markers match their respective route colors
@@ -305,7 +328,10 @@ curl -X POST http://localhost:3000/api/trpc/routePlanner.planTrip \
       {"segmentId": 229781, "forwardDirection": true},
       {"segmentId": 1073806, "forwardDirection": true}
     ],
-    "maxDays": 4
+    "startDate": "2024-06-15",
+    "endDate": "2024-06-16",
+    "maxDailyDistanceKm": 100,
+    "maxDailyElevationM": 1000
   }'
 ```
 

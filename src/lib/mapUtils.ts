@@ -237,7 +237,7 @@ export function getSegmentCenter(segment: SegmentDTO): [number, number] {
 }
 
 /**
- * Day colors for multi-day trip visualization
+ * Day colors for multi-day trip visualization (up to 7 days)
  * Consistent colors used across map routes and UI components
  */
 export const DAY_COLORS = {
@@ -245,11 +245,14 @@ export const DAY_COLORS = {
   2: { hex: "#10b981", name: "Green", bgClass: "bg-green-50", borderClass: "border-green-200", textClass: "text-green-600" },
   3: { hex: "#f97316", name: "Orange", bgClass: "bg-orange-50", borderClass: "border-orange-200", textClass: "text-orange-600" },
   4: { hex: "#ec4899", name: "Pink", bgClass: "bg-pink-50", borderClass: "border-pink-200", textClass: "text-pink-600" },
+  5: { hex: "#8b5cf6", name: "Purple", bgClass: "bg-purple-50", borderClass: "border-purple-200", textClass: "text-purple-600" },
+  6: { hex: "#14b8a6", name: "Teal", bgClass: "bg-teal-50", borderClass: "border-teal-200", textClass: "text-teal-600" },
+  7: { hex: "#f43f5e", name: "Rose", bgClass: "bg-rose-50", borderClass: "border-rose-200", textClass: "text-rose-600" },
 } as const;
 
 /**
  * Get color configuration for a specific day
- * @param dayNumber Day number (1-4)
+ * @param dayNumber Day number (1-7)
  * @returns Color configuration object
  */
 export function getDayColor(dayNumber: number) {
@@ -258,7 +261,7 @@ export function getDayColor(dayNumber: number) {
 
 /**
  * Get hex color for a specific day
- * @param dayNumber Day number (1-4)  
+ * @param dayNumber Day number (1-7)  
  * @returns Hex color string
  */
 export function getDayColorHex(dayNumber: number): string {
@@ -270,5 +273,13 @@ export function getDayColorHex(dayNumber: number): string {
  * @returns Array of hex color strings
  */
 export function getDayColorsArray(): string[] {
-  return [DAY_COLORS[1].hex, DAY_COLORS[2].hex, DAY_COLORS[3].hex, DAY_COLORS[4].hex];
+  return [
+    DAY_COLORS[1].hex, 
+    DAY_COLORS[2].hex, 
+    DAY_COLORS[3].hex, 
+    DAY_COLORS[4].hex,
+    DAY_COLORS[5].hex,
+    DAY_COLORS[6].hex,
+    DAY_COLORS[7].hex
+  ];
 }

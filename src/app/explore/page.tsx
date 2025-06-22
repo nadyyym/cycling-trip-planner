@@ -483,7 +483,7 @@ export default function ExplorePage() {
 
     // Remove existing trip route layers and sources
     try {
-      for (let i = 1; i <= 4; i++) {
+      for (let i = 1; i <= 7; i++) {
         const layerId = `trip-route-day-${i}`;
         const sourceId = `trip-route-day-${i}-source`;
         

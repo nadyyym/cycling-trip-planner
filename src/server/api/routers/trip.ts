@@ -18,7 +18,7 @@ const saveTripInput = z.object({
   
   // Route planner results
   routes: z.array(z.object({
-    dayNumber: z.number().min(1).max(4),
+    dayNumber: z.number().min(1).max(7),
     distanceKm: z.number(),
     elevationGainM: z.number(),
     geometry: z.object({
