@@ -26,7 +26,7 @@ interface TripDay {
   durationHours?: number;
   segments?: TripSegment[];
   geometry?: {
-    type: string;
+    type: "LineString";
     coordinates: [number, number][];
   };
 }
@@ -311,7 +311,7 @@ export default function TripDisplayPage() {
           }
           
           geometry = {
-            type: "LineString",
+            type: "LineString" as const,
             coordinates: [startCoord, endCoord],
           };
           

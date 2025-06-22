@@ -295,11 +295,14 @@ export const tripRouter = createTRPCRouter({
         dayCount: Array.isArray(trip.days) ? trip.days.length : 0,
         totalDistanceKm: trip.totalDistanceKm,
         isCreator: ctx.session?.user?.id === trip.creatorUserId,
-        hasStoredGeometry: Array.isArray(trip.days) ? trip.days.every((day: any) => day.geometry) : false,
-        geometryCoordinateCounts: Array.isArray(trip.days) ? trip.days.map((day: any) => ({
-          day: day.day,
-          coordinateCount: day.geometry?.coordinates?.length || 0,
-        })) : [],
+        hasStoredGeometry: Array.isArray(trip.days) ? trip.days.every((day: unknown) => (day as { geometry?: unknown }).geometry) : false,
+        geometryCoordinateCounts: Array.isArray(trip.days) ? trip.days.map((day: unknown) => {
+          const dayData = day as { day: number; geometry?: { coordinates?: unknown[] } };
+          return {
+            day: dayData.day,
+            coordinateCount: dayData.geometry?.coordinates?.length ?? 0,
+          };
+        }) : [],
         timestamp: new Date().toISOString(),
       });
 

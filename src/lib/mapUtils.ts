@@ -99,7 +99,7 @@ export function segmentsToGeoJSON(segments: SegmentDTO[]) {
         climbCategory: segment.climbCategory,
       },
       geometry: {
-        type: "LineString",
+        type: "LineString" as const,
         coordinates,
       },
     };

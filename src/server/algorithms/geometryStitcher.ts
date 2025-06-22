@@ -262,7 +262,7 @@ export async function stitchRouteGeometry(
 
   return {
     geometry: {
-      type: "LineString",
+      type: "LineString" as const,
       coordinates: allCoordinates,
     },
     cumulativeDistances,
@@ -297,7 +297,7 @@ export function extractDayGeometry(
 
   if (segmentIndices.length === 0) {
     return {
-      type: "LineString",
+      type: "LineString" as const,
       coordinates: [],
     };
   }
