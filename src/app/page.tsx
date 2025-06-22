@@ -215,33 +215,7 @@ export default async function Home() {
         </div>
       </div>
 
-      {/* Footer CTA */}
-      <div className="bg-gray-50 py-16">
-        <div className="container mx-auto px-4 text-center">
-          <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-4">
-            Start Planning Your Trip
-          </h2>
-          <p className="text-lg text-gray-600 mb-8 max-w-2xl mx-auto">
-            Join cyclists who have planned their routes with our trip planner
-          </p>
-          
-          {!session && (
-            <form
-              action={async () => {
-                "use server";
-                await signIn("strava", { redirectTo: "/" });
-              }}
-            >
-              <button
-                type="submit"
-                className="inline-flex items-center gap-3 rounded-lg bg-gradient-to-r from-orange-500 to-orange-600 px-8 py-4 font-semibold text-white shadow-lg hover:from-orange-600 hover:to-orange-700 transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5"
-              >
-                Get Started with Strava
-              </button>
-            </form>
-          )}
-        </div>
-      </div>
+
     </main>
   );
 }
