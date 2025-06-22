@@ -83,43 +83,56 @@ export function generateGPXFileName(route: RouteForGPX): string {
 
 /**
  * Create and download a ZIP file containing all route GPX files
+ * This function only works in browser environments
  */
 export async function downloadRoutesAsZip(routes: RouteForGPX[]): Promise<void> {
-  const JSZip = (await import('jszip')).default;
-  const zip = new JSZip();
+  // Ensure this only runs in browser
+  if (typeof window === 'undefined') {
+    throw new Error('GPX download is only available in browser environments');
+  }
 
   console.log('[GPX_DOWNLOAD_START]', {
     routeCount: routes.length,
     timestamp: new Date().toISOString(),
   });
 
-  // Generate GPX files for each route
-  for (const route of routes) {
-    try {
-      const fileName = generateGPXFileName(route);
-      const gpxContent = generateGPX(route, fileName);
-      
-      // Add to ZIP with .gpx extension
-      zip.file(`${fileName}.gpx`, gpxContent);
-      
-      console.log('[GPX_FILE_GENERATED]', {
-        dayNumber: route.dayNumber,
-        fileName: `${fileName}.gpx`,
-        coordinateCount: route.geometry.coordinates.length,
-        distanceKm: Math.round(route.distanceKm),
-        elevationGainM: Math.round(route.elevationGainM),
-      });
-    } catch (error) {
-      console.error(`[GPX_ERROR] Failed to generate GPX for Day ${route.dayNumber}:`, error);
-      
-      // Fallback filename if anything fails
-      const fallbackFileName = `Day ${route.dayNumber}`;
-      const gpxContent = generateGPX(route, fallbackFileName);
-      zip.file(`${fallbackFileName}.gpx`, gpxContent);
-    }
-  }
-
   try {
+    // Dynamic import with better error handling
+    const JSZipModule = await import('jszip');
+    const JSZip = JSZipModule.default;
+    
+    if (!JSZip) {
+      throw new Error('JSZip module failed to load');
+    }
+
+    const zip = new JSZip();
+
+    // Generate GPX files for each route
+    for (const route of routes) {
+      try {
+        const fileName = generateGPXFileName(route);
+        const gpxContent = generateGPX(route, fileName);
+        
+        // Add to ZIP with .gpx extension
+        zip.file(`${fileName}.gpx`, gpxContent);
+        
+        console.log('[GPX_FILE_GENERATED]', {
+          dayNumber: route.dayNumber,
+          fileName: `${fileName}.gpx`,
+          coordinateCount: route.geometry.coordinates.length,
+          distanceKm: Math.round(route.distanceKm),
+          elevationGainM: Math.round(route.elevationGainM),
+        });
+      } catch (error) {
+        console.error(`[GPX_ERROR] Failed to generate GPX for Day ${route.dayNumber}:`, error);
+        
+        // Fallback filename if anything fails
+        const fallbackFileName = `Day ${route.dayNumber}`;
+        const gpxContent = generateGPX(route, fallbackFileName);
+        zip.file(`${fallbackFileName}.gpx`, gpxContent);
+      }
+    }
+
     // Generate ZIP file
     const zipBlob = await zip.generateAsync({ type: 'blob' });
     
@@ -144,6 +157,16 @@ export async function downloadRoutesAsZip(routes: RouteForGPX[]): Promise<void> 
     });
   } catch (error) {
     console.error('[GPX_DOWNLOAD_ERROR]', error);
-    throw new Error('Failed to generate or download ZIP file');
+    
+    // Provide a more specific error message
+    if (error instanceof Error) {
+      if (error.message.includes('JSZip')) {
+        throw new Error('Failed to load ZIP library. Please try again or download individual GPX files.');
+      } else {
+        throw new Error(`GPX download failed: ${error.message}`);
+      }
+    } else {
+      throw new Error('Failed to generate or download ZIP file');
+    }
   }
 } 
