@@ -216,7 +216,12 @@ export async function stitchRouteGeometry(
 
     // Update cumulative values
     totalDistance += transferDistance + segmentMeta.distance;
-    totalElevationGain += transferElevationGain + segmentMeta.elevationGain;
+    
+    // Ensure all elevation values are valid numbers and handle NaN
+    const validTransferElevation = Number.isFinite(transferElevationGain) ? transferElevationGain : 0;
+    const validSegmentElevation = Number.isFinite(segmentMeta.elevationGain) ? segmentMeta.elevationGain : 0;
+    
+    totalElevationGain += validTransferElevation + validSegmentElevation;
 
     // Store cumulative values at this segment boundary
     cumulativeDistances.push(totalDistance);
@@ -227,8 +232,8 @@ export async function stitchRouteGeometry(
       segmentId: segment.segmentId,
       transferDistance: transferDistance,
       segmentDistance: segmentMeta.distance,
-      transferElevationGain: transferElevationGain,
-      segmentElevationGain: segmentMeta.elevationGain,
+      transferElevationGain: validTransferElevation,
+      segmentElevationGain: validSegmentElevation,
       cumulativeDistance: totalDistance,
       cumulativeElevationGain: totalElevationGain,
       coordinateCount: allCoordinates.length,

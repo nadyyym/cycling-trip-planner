@@ -384,7 +384,7 @@ export class StravaClient {
               ? formatTime(segment.kom_time)
               : undefined,
             climbCategory: formatClimbCategory(segment.climb_category),
-            elevationGain: segment.elev_difference,
+            elevationGain: Math.max(0, segment.elev_difference ?? 0), // Ensure valid number, minimum 0
           });
 
           successCount++;
@@ -425,7 +425,7 @@ export class StravaClient {
               ? formatTime(segment.kom_time)
               : undefined,
             climbCategory: formatClimbCategory(segment.climb_category),
-            elevationGain: segment.elev_difference,
+            elevationGain: Math.max(0, segment.elev_difference ?? 0), // Ensure valid number, minimum 0
           });
         }
       }
@@ -495,7 +495,7 @@ export class StravaClient {
         elevLow: data.elevation_low,
         komTime: data.kom ? formatTime(data.kom.elapsed_time) : undefined,
         climbCategory: formatClimbCategory(data.climb_category),
-        elevationGain: data.elev_difference,
+        elevationGain: Math.max(0, data.elev_difference ?? 0), // Ensure valid number, minimum 0
       };
 
       console.log(`[STRAVA_GET_SEGMENT_DETAIL_SUCCESS]`, {
@@ -551,7 +551,7 @@ export class StravaClient {
         id: data.id.toString(),
         name: data.name,
         distance: data.distance,
-        elevationGain: data.elev_difference,
+        elevationGain: Math.max(0, data.elev_difference ?? 0), // Ensure valid number, minimum 0
         startCoord: [data.start_latlng[1], data.start_latlng[0]], // Convert to [lon, lat]
         endCoord: [data.end_latlng[1], data.end_latlng[0]], // Convert to [lon, lat]
       };
@@ -618,7 +618,7 @@ export class StravaClient {
         polyline: segment.map.polyline, // Starred segments include full details
         komTime: segment.kom ? formatTime(segment.kom.elapsed_time) : undefined,
         climbCategory: formatClimbCategory(segment.climb_category),
-        elevationGain: segment.elev_difference,
+        elevationGain: Math.max(0, segment.elev_difference ?? 0), // Ensure valid number, minimum 0
       }));
 
       const starredDuration = Date.now() - starredStart;

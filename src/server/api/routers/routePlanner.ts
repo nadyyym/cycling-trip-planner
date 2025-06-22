@@ -4,6 +4,7 @@ import { PlanRequestSchema, type PlanResponse } from "~/types/routePlanner";
 import { StravaClient } from "~/server/integrations/strava";
 import {
   getMatrix,
+  calculateElevationFromCoordinates,
   type Coordinate,
   type CostMatrix,
   ExternalApiError,
@@ -607,58 +608,66 @@ export const routePlannerRouter = createTRPCRouter({
             });
 
             // Build DayRoute objects for the response using stitched geometry
-            const routes = partitionResult.partitions!.map((partition) => {
-              const segmentsVisited = partition.segmentIndices.map(
-                (segmentIndex) =>
-                  tspSolution.orderedSegments[segmentIndex]!.segmentId,
-              );
-
-              // Build detailed segment information with names and Strava URLs
-              const segments = partition.segmentIndices.map((segmentIndex) => {
-                const segmentId = tspSolution.orderedSegments[segmentIndex]!.segmentId;
-                const segmentMeta = segmentMetas.find(
-                  (meta) => meta.id === segmentId.toString(),
+            const routes = await Promise.all(
+              partitionResult.partitions!.map(async (partition) => {
+                const segmentsVisited = partition.segmentIndices.map(
+                  (segmentIndex) =>
+                    tspSolution.orderedSegments[segmentIndex]!.segmentId,
                 );
 
-                if (!segmentMeta) {
-                  throw new Error(
-                    `Segment metadata not found for segment ID ${segmentId}`,
+                // Build detailed segment information with names and Strava URLs
+                const segments = partition.segmentIndices.map((segmentIndex) => {
+                  const segmentId = tspSolution.orderedSegments[segmentIndex]!.segmentId;
+                  const segmentMeta = segmentMetas.find(
+                    (meta) => meta.id === segmentId.toString(),
                   );
-                }
+
+                  if (!segmentMeta) {
+                    throw new Error(
+                      `Segment metadata not found for segment ID ${segmentId}`,
+                    );
+                  }
+
+                  return {
+                    id: segmentId,
+                    name: segmentMeta.name,
+                    stravaUrl: `https://www.strava.com/segments/${segmentId}`,
+                  };
+                });
+
+                // Extract day-specific geometry from the stitched route
+                const dayGeometry = extractDayGeometry(
+                  stitchedGeometry,
+                  partition.segmentIndices,
+                );
+
+                // Calculate elevation gain from the actual route geometry coordinates
+                const calculatedElevationGain = await calculateElevationFromCoordinates(
+                  dayGeometry.coordinates
+                );
+
+                console.log(`[ROUTE_PLANNER_DAY_GEOMETRY]`, {
+                  dayNumber: partition.dayNumber,
+                  segmentIndices: partition.segmentIndices,
+                  segmentCount: partition.segmentIndices.length,
+                  coordinateCount: dayGeometry.coordinates.length,
+                  distanceKm: partition.distanceKm,
+                  partitionElevationGainM: partition.elevationGainM,
+                  calculatedElevationGainM: Math.round(calculatedElevationGain),
+                  segmentDetails: segments.map((s) => ({ id: s.id, name: s.name })),
+                });
 
                 return {
-                  id: segmentId,
-                  name: segmentMeta.name,
-                  stravaUrl: `https://www.strava.com/segments/${segmentId}`,
+                  dayNumber: partition.dayNumber,
+                  distanceKm: partition.distanceKm,
+                  elevationGainM: calculatedElevationGain, // Use calculated elevation from geometry
+                  geometry: dayGeometry,
+                  segments,
+                  segmentsVisited, // Keep for backwards compatibility
+                  durationMinutes: partition.durationMinutes,
                 };
-              });
-
-              // Extract day-specific geometry from the stitched route
-              const dayGeometry = extractDayGeometry(
-                stitchedGeometry,
-                partition.segmentIndices,
-              );
-
-              console.log(`[ROUTE_PLANNER_DAY_GEOMETRY]`, {
-                dayNumber: partition.dayNumber,
-                segmentIndices: partition.segmentIndices,
-                segmentCount: partition.segmentIndices.length,
-                coordinateCount: dayGeometry.coordinates.length,
-                distanceKm: partition.distanceKm,
-                elevationGainM: partition.elevationGainM,
-                segmentDetails: segments.map((s) => ({ id: s.id, name: s.name })),
-              });
-
-              return {
-                dayNumber: partition.dayNumber,
-                distanceKm: partition.distanceKm,
-                elevationGainM: partition.elevationGainM,
-                geometry: dayGeometry,
-                segments,
-                segmentsVisited, // Keep for backwards compatibility
-                durationMinutes: partition.durationMinutes,
-              };
-            });
+              })
+            );
 
             // Calculate totals
             const totalDistanceKm = routes.reduce(

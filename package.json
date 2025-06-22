@@ -39,6 +39,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.41.0",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.522.0",
     "mapbox-gl": "^3.13.0",
     "next": "^15.2.3",
@@ -55,6 +56,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
+    "@types/jszip": "^3.4.0",
     "@types/node": "^20.14.10",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

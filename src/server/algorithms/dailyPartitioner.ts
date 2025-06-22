@@ -168,7 +168,11 @@ function partitionRouteSimplified(
     // Calculate what the new totals would be if we add this segment
     const newDistance =
       currentDayDistance + transferDistance + segmentMeta.distance;
-    const newElevation = currentDayElevation + segmentMeta.elevationGain;
+    
+    // Ensure elevation gain is a valid number
+    const validSegmentElevation = Number.isFinite(segmentMeta.elevationGain) ? segmentMeta.elevationGain : 0;
+    const newElevation = currentDayElevation + validSegmentElevation;
+    
     const segmentDurationSeconds = (segmentMeta.distance / 1000) * (3600 / 25); // 25 km/h average
     const newDuration =
       currentDayDuration + transferDuration + segmentDurationSeconds;
@@ -206,7 +210,7 @@ function partitionRouteSimplified(
       // Start new day with this segment
       currentDaySegments = [i];
       currentDayDistance = transferDistance + segmentMeta.distance;
-      currentDayElevation = segmentMeta.elevationGain;
+      currentDayElevation = validSegmentElevation;
       currentDayDuration = transferDuration + segmentDurationSeconds;
     } else {
       // Add segment to current day
@@ -226,11 +230,11 @@ function partitionRouteSimplified(
       };
     }
 
-    if (segmentMeta.elevationGain > DAILY_CONSTRAINTS.MAX_ELEVATION_M) {
+    if (validSegmentElevation > DAILY_CONSTRAINTS.MAX_ELEVATION_M) {
       return {
         success: false,
         errorCode: "dailyLimitExceeded",
-        errorDetails: `Segment ${i + 1} (ID: ${segment.segmentId}) has ${Math.round(segmentMeta.elevationGain)}m elevation gain, exceeding daily limit of ${DAILY_CONSTRAINTS.MAX_ELEVATION_M}m`,
+        errorDetails: `Segment ${i + 1} (ID: ${segment.segmentId}) has ${Math.round(validSegmentElevation)}m elevation gain, exceeding daily limit of ${DAILY_CONSTRAINTS.MAX_ELEVATION_M}m`,
       };
     }
   }
