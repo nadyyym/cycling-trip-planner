@@ -3,8 +3,9 @@
 import { useSegmentStore, MAX_SEGMENTS } from "~/app/_hooks/useSegmentStore";
 import { type SegmentDTO } from "~/server/integrations/strava";
 import { api } from "~/trpc/react";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useToast } from "~/hooks/use-toast";
+import { FixedSizeList as List } from "react-window";
 
 interface SegmentListSidebarProps {
   segments: SegmentDTO[];
@@ -12,6 +13,154 @@ interface SegmentListSidebarProps {
   error: { message: string } | null;
   debouncedBounds: { sw: [number, number]; ne: [number, number] } | null;
   isRateLimited?: boolean;
+}
+
+interface SegmentItemProps {
+  index: number;
+  style: React.CSSProperties;
+  data: {
+    segments: SegmentDTO[];
+    selectedSegmentIds: Set<string>;
+    highlightedSegmentId: string | null;
+    favouriteSegmentIds: string[];
+    onCardHover: (segmentId: string | null) => void;
+    onCardClick: (segmentId: string) => void;
+    onZoomToSegment: (segmentId: string, event: React.MouseEvent) => void;
+    onCheckboxChange: (segmentId: string) => void;
+  };
+}
+
+/**
+ * Virtualized segment item component
+ */
+function SegmentItem({ index, style, data }: SegmentItemProps) {
+  const segment = data.segments[index];
+  if (!segment) return null;
+
+  const isSelected = data.selectedSegmentIds.has(segment.id);
+  const isHighlighted = data.highlightedSegmentId === segment.id;
+  const isFavourited = data.favouriteSegmentIds.includes(segment.id);
+
+  return (
+    <div style={style}>
+      <div
+        className={`cursor-pointer rounded-lg border p-3 transition-all duration-200 mx-2 mb-2 ${
+          isHighlighted
+            ? "border-pink-300 bg-pink-50 shadow-md"
+            : isSelected
+              ? "border-blue-300 bg-blue-50 shadow-sm"
+              : "border-gray-200 hover:border-blue-200 hover:bg-blue-50/50 hover:shadow-sm"
+        }`}
+        onMouseEnter={() => data.onCardHover(segment.id)}
+        onMouseLeave={() => data.onCardHover(null)}
+        onClick={(_e) => data.onCardClick(segment.id)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            data.onCardClick(segment.id);
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-label={`${isSelected ? 'Deselect' : 'Select'} segment: ${segment.name}`}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            {/* Segment name */}
+            <div className="mb-2 flex items-center gap-2">
+              <h4 className="truncate text-sm font-medium text-gray-900">
+                {segment.name}
+              </h4>
+              {isFavourited && (
+                <span
+                  className="flex-shrink-0 text-xs font-medium text-yellow-600"
+                  title="Segment already favourited"
+                >
+                  ⭐
+                </span>
+              )}
+            </div>
+
+            {/* Distance and elevation row */}
+            <div className="mb-1 flex items-center gap-4 text-xs text-gray-600">
+              <span className="flex items-center gap-1">
+                📏 {(segment.distance / 1000).toFixed(1)} km
+              </span>
+              {(segment.ascentM > 0 || segment.descentM > 0) && (
+                <>
+                  {segment.ascentM > 0 && (
+                    <span className="flex items-center gap-1 text-orange-600">
+                      ⬆️ {segment.ascentM}m
+                    </span>
+                  )}
+                  {segment.descentM > 0 && (
+                    <span className="flex items-center gap-1 text-sky-500">
+                      ⬇️ {segment.descentM}m
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Grade and KOM time row */}
+            <div className="flex items-center gap-4 text-xs text-gray-600">
+              <span className="flex items-center gap-1">
+                📈 {segment.averageGrade.toFixed(1)}%
+              </span>
+              {segment.komTime && (
+                <span className="flex items-center gap-1">
+                  🏆 {segment.komTime}
+                </span>
+              )}
+              {segment.climbCategory && (
+                <span className="rounded bg-orange-100 px-1.5 py-0.5 text-xs text-orange-800">
+                  Cat {segment.climbCategory}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex flex-shrink-0 items-center gap-2">
+            {/* Zoom to segment button */}
+            <button
+              onClick={(e) => data.onZoomToSegment(segment.id, e)}
+              className="flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              title="Zoom to segment on map"
+              aria-label={`Zoom to ${segment.name} on map`}
+            >
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
+                />
+              </svg>
+            </button>
+
+            {/* Save checkbox */}
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={(e) => {
+                e.stopPropagation(); // Prevent card click when clicking checkbox
+                data.onCheckboxChange(segment.id);
+              }}
+              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              title="Add segment to favourites"
+              aria-label={`Add ${segment.name} to favourites`}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -194,9 +343,27 @@ export function SegmentListSidebar({
     addFavouritesMutation.mutate({ segments: segmentsToSave });
   };
 
+  // Memoize the data for the virtualized list to prevent unnecessary re-renders
+  const listData = useMemo(() => ({
+    segments,
+    selectedSegmentIds,
+    highlightedSegmentId,
+    favouriteSegmentIds,
+    onCardHover: handleCardHover,
+    onCardClick: handleCardClick,
+    onZoomToSegment: handleZoomToSegment,
+    onCheckboxChange: handleCheckboxChange,
+  }), [
+    segments, 
+    selectedSegmentIds, 
+    highlightedSegmentId, 
+    favouriteSegmentIds,
+    // Note: handler functions are stable due to useCallback in the store
+  ]);
+
   return (
-    <div className="w-80 overflow-y-auto border-r bg-white p-4">
-      <div className="space-y-4">
+    <div className="w-80 overflow-hidden border-r bg-white">
+      <div className="p-4">
         {/* Header with segment count */}
         <div className="border-t pt-4">
           <h3 className="mb-2 text-sm font-medium text-gray-900">
@@ -253,7 +420,6 @@ export function SegmentListSidebar({
                   </button>
                 </div>
               </div>
-
             </div>
           )}
 
@@ -329,139 +495,23 @@ export function SegmentListSidebar({
               </div>
             </div>
           )}
-
-          {/* Segments list */}
-          {segments.length > 0 && (
-            <div className="max-h-96 space-y-2 overflow-y-auto">
-              {segments.map((segment) => {
-                const isSelected = selectedSegmentIds.has(segment.id);
-                const isHighlighted = highlightedSegmentId === segment.id;
-                const isFavourited = favouriteSegmentIds.includes(segment.id);
-
-                return (
-                  <div
-                    key={segment.id}
-                    className={`cursor-pointer rounded-lg border p-3 transition-all duration-200 ${
-                      isHighlighted
-                        ? "border-pink-300 bg-pink-50 shadow-md"
-                        : isSelected
-                          ? "border-blue-300 bg-blue-50 shadow-sm"
-                          : "border-gray-200 hover:border-blue-200 hover:bg-blue-50/50 hover:shadow-sm"
-                    }`}
-                    onMouseEnter={() => handleCardHover(segment.id)}
-                    onMouseLeave={() => handleCardHover(null)}
-                    onClick={(_e) => handleCardClick(segment.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        handleCardClick(segment.id);
-                      }
-                    }}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`${isSelected ? 'Deselect' : 'Select'} segment: ${segment.name}`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        {/* Segment name */}
-                        <div className="mb-2 flex items-center gap-2">
-                          <h4 className="truncate text-sm font-medium text-gray-900">
-                            {segment.name}
-                          </h4>
-                          {isFavourited && (
-                            <span
-                              className="flex-shrink-0 text-xs font-medium text-yellow-600"
-                              title="Segment already favourited"
-                            >
-                              ⭐
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Distance and elevation row */}
-                        <div className="mb-1 flex items-center gap-4 text-xs text-gray-600">
-                          <span className="flex items-center gap-1">
-                            📏 {(segment.distance / 1000).toFixed(1)} km
-                          </span>
-                          {(segment.ascentM > 0 || segment.descentM > 0) && (
-                            <>
-                              {segment.ascentM > 0 && (
-                                <span className="flex items-center gap-1 text-orange-600">
-                                  ⬆️ {segment.ascentM}m
-                                </span>
-                              )}
-                              {segment.descentM > 0 && (
-                                <span className="flex items-center gap-1 text-sky-500">
-                                  ⬇️ {segment.descentM}m
-                                </span>
-                              )}
-                            </>
-                          )}
-                        </div>
-
-                        {/* Grade and KOM time row */}
-                        <div className="flex items-center gap-4 text-xs text-gray-600">
-                          <span className="flex items-center gap-1">
-                            📈 {segment.averageGrade.toFixed(1)}%
-                          </span>
-                          {segment.komTime && (
-                            <span className="flex items-center gap-1">
-                              🏆 {segment.komTime}
-                            </span>
-                          )}
-                          {segment.climbCategory && (
-                            <span className="rounded bg-orange-100 px-1.5 py-0.5 text-xs text-orange-800">
-                              Cat {segment.climbCategory}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Action buttons */}
-                      <div className="flex flex-shrink-0 items-center gap-2">
-                        {/* Zoom to segment button */}
-                        <button
-                          onClick={(e) => handleZoomToSegment(segment.id, e)}
-                          className="flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                          title="Zoom to segment on map"
-                          aria-label={`Zoom to ${segment.name} on map`}
-                        >
-                          <svg
-                            className="h-4 w-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
-                            />
-                          </svg>
-                        </button>
-
-                        {/* Save checkbox */}
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={(e) => {
-                            e.stopPropagation(); // Prevent card click when clicking checkbox
-                            handleCheckboxChange(segment.id);
-                          }}
-                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                          title="Add segment to favourites"
-                          aria-label={`Add ${segment.name} to favourites`}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
         </div>
       </div>
+
+      {/* Virtualized segments list */}
+      {segments.length > 0 && (
+        <div className="flex-1">
+          <List
+            height={400} // Fixed height for the virtualized list
+            itemCount={segments.length}
+            itemSize={120} // Height of each segment item
+            itemData={listData}
+            width="100%"
+          >
+            {SegmentItem}
+          </List>
+        </div>
+      )}
     </div>
   );
 }

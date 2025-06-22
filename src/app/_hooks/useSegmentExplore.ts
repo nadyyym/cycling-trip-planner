@@ -1,32 +1,39 @@
 import { api } from "~/trpc/react";
 import { type MapBounds, roundBounds } from "./useDebouncedBounds";
 import { useRateLimitHandler } from "./useRateLimitHandler";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { skipToken } from "@tanstack/react-query";
+import { segmentsToGeoJSON } from "~/lib/mapUtils";
 
 /**
  * Custom hook for exploring Strava segments within map bounds
  * Handles loading states, errors, caching, and rate limiting
  *
  * @param bounds - Map bounds to search within (null disables the query)
+ * @param detail - Polyline detail level ("simplified" or "full")
  * @returns Query result with segments data, loading state, and error handling
  */
-export function useSegmentExplore(bounds: MapBounds | null) {
+export function useSegmentExplore(
+  bounds: MapBounds | null, 
+  detail: "simplified" | "full" = "simplified"
+) {
   const { isRateLimited, handleRateLimit } = useRateLimitHandler();
   // Round bounds to reduce cache misses for nearly identical requests
   const roundedBounds = bounds ? roundBounds(bounds) : null;
 
   // Debug logging to track bounds changes
-  console.log("[SEGMENT_EXPLORE_HOOK]", {
-    inputBounds: bounds,
-    roundedBounds,
-    isRateLimited,
-    shouldSkip: !roundedBounds || isRateLimited,
-    timestamp: new Date().toISOString(),
-  });
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[SEGMENT_EXPLORE_HOOK]", {
+      inputBounds: bounds,
+      roundedBounds,
+      isRateLimited,
+      shouldSkip: !roundedBounds || isRateLimited,
+      timestamp: new Date().toISOString(),
+    });
+  }
 
   const query = api.strava.segmentExplore.useQuery(
-    !roundedBounds || isRateLimited ? skipToken : roundedBounds,
+    !roundedBounds || isRateLimited ? skipToken : { ...roundedBounds, detail },
     {
       // Cache for 5 minutes to avoid duplicate requests
       staleTime: 5 * 60 * 1000, // 5 minutes
@@ -64,22 +71,37 @@ export function useSegmentExplore(bounds: MapBounds | null) {
   }, [query.error, handleRateLimit]);
 
   // Log results when query succeeds or fails
-  if (query.data && roundedBounds) {
-    console.log(
-      `Segment explore success: ${query.data.length} segments found`,
-      {
-        bounds: roundedBounds,
-        count: query.data.length,
-      },
-    );
+  if (process.env.NODE_ENV !== "production") {
+    if (query.data && roundedBounds) {
+      console.log(
+        `Segment explore success: ${query.data.length} segments found`,
+        {
+          bounds: roundedBounds,
+          count: query.data.length,
+        },
+      );
+    }
+
+    if (query.error) {
+      console.error("Segment explore failed:", query.error);
+    }
   }
 
-  if (query.error) {
-    console.error("Segment explore failed:", query.error);
-  }
+  // Memoize GeoJSON conversion to avoid re-processing same segments
+  const segmentsGeoJSON = useMemo(() => {
+    const segments = query.data ?? [];
+    if (segments.length === 0) {
+      return {
+        type: "FeatureCollection" as const,
+        features: [],
+      };
+    }
+    return segmentsToGeoJSON(segments);
+  }, [query.data]);
 
   return {
     segments: query.data ?? [],
+    segmentsGeoJSON,
     isLoading: query.isLoading,
     isError: query.isError,
     error: query.error,

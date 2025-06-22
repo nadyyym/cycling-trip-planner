@@ -1,5 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { calculateElevationFromPolyline } from "~/server/algorithms/elevation";
+import simplify from "simplify-js";
+import polyline from "@mapbox/polyline";
 
 // Types for Strava API responses
 interface StravaSegmentExploreResponse {
@@ -88,6 +90,44 @@ export interface SegmentDetailDTO extends SegmentDTO {
 export interface BoundsInput {
   sw: [number, number]; // [lat, lng]
   ne: [number, number]; // [lat, lng]
+}
+
+/**
+ * Options for polyline detail level
+ */
+export type PolylineDetail = "full" | "simplified";
+
+/**
+ * Simplify a polyline using Douglas-Peucker algorithm
+ * @param encodedPolyline - Encoded polyline string from Strava
+ * @param tolerance - Simplification tolerance (higher = more simplified)
+ * @returns Simplified encoded polyline
+ */
+function simplifyPolyline(encodedPolyline: string, tolerance = 0.0003): string {
+  try {
+    // Decode the polyline to coordinates
+    const decoded = polyline.decode(encodedPolyline);
+    
+    // Convert to format expected by simplify-js: {x: lng, y: lat}
+    const points = decoded.map(([lat, lng]) => ({ x: lng, y: lat }));
+    
+    // Simplify using Douglas-Peucker algorithm
+    const simplified = simplify(points, tolerance, true);
+    
+    // Convert back to [lat, lng] format and encode
+    const simplifiedCoords = simplified.map(point => [point.y, point.x] as [number, number]);
+    
+    return polyline.encode(simplifiedCoords);
+  } catch (error) {
+    // If simplification fails, return original polyline
+    console.warn(`[POLYLINE_SIMPLIFICATION_ERROR]`, {
+      error: error instanceof Error ? error.message : "Unknown error",
+      polylineLength: encodedPolyline.length,
+      tolerance,
+      timestamp: new Date().toISOString(),
+    });
+    return encodedPolyline;
+  }
 }
 
 /**
@@ -334,7 +374,7 @@ export class StravaClient {
   /**
    * Explore segments within given bounds and fetch their detailed polylines
    */
-  async exploreSegments(bounds: BoundsInput): Promise<SegmentDTO[]> {
+  async exploreSegments(bounds: BoundsInput, detail: PolylineDetail = "simplified"): Promise<SegmentDTO[]> {
     const { sw, ne } = bounds;
     // Strava expects bounds as: sw_lat,sw_lng,ne_lat,ne_lng
     const boundsStr = `${sw[0]},${sw[1]},${ne[0]},${ne[1]}`;
@@ -376,6 +416,11 @@ export class StravaClient {
           // Calculate bidirectional elevation from polyline
           const elevationResult = calculateElevationFromPolyline(detailData.map.polyline);
 
+          // Simplify polyline if requested
+          const processedPolyline = detail === "simplified" 
+            ? simplifyPolyline(detailData.map.polyline)
+            : detailData.map.polyline;
+
           segments.push({
             id: segment.id.toString(),
             name: segment.name,
@@ -385,7 +430,7 @@ export class StravaClient {
             lonStart: segment.start_latlng[1],
             latEnd: segment.end_latlng[0],
             lonEnd: segment.end_latlng[1],
-            polyline: detailData.map.polyline, // Now we have the full polyline!
+            polyline: processedPolyline,
             komTime: segment.kom_time
               ? formatTime(segment.kom_time)
               : undefined,

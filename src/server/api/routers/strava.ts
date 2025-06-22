@@ -6,6 +6,7 @@ import {
   StravaClient,
   type BoundsInput,
   type SegmentDTO,
+  type PolylineDetail,
 } from "~/server/integrations/strava";
 import { accounts, segments } from "~/server/db/schema";
 import { eq, inArray, sql, and, gte } from "drizzle-orm";
@@ -15,6 +16,7 @@ import { segmentExploreCache, LRUCache } from "~/server/cache/lru";
 const boundsSchema = z.object({
   sw: z.tuple([z.number(), z.number()]), // [lat, lng]
   ne: z.tuple([z.number(), z.number()]), // [lat, lng]
+  detail: z.enum(["full", "simplified"]).optional().default("simplified"),
 });
 
 const segmentIdSchema = z.object({
@@ -219,6 +221,7 @@ export const stravaRouter = createTRPCRouter({
         const apiStart = Date.now();
         const stravaSegments = await stravaClient.exploreSegments(
           input as BoundsInput,
+          input.detail,
         );
         const apiDuration = Date.now() - apiStart;
 

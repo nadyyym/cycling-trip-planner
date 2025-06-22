@@ -68,22 +68,26 @@ export default function TripDisplayPage() {
   // Convert API trip data to Trip format for map component
   const mapTrip: Trip | null = useMemo(() => {
     if (!trip?.days || !Array.isArray(trip.days)) {
+          if (process.env.NODE_ENV !== "production") {
       console.log("[TRIP_DISPLAY_CONVERT]", {
         hasTrip: !!trip,
         hasDays: Array.isArray(trip?.days),
         trip,
       });
+    }
       return null;
     }
 
-    console.log("[TRIP_DISPLAY_CONVERT]", {
-      slug,
-      dayCount: trip.days.length,
-      totalDistance: trip.totalDistanceKm,
-      totalElevation: trip.totalElevationM,
-      startDate: trip.startDate,
-      timestamp: new Date().toISOString(),
-    });
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[TRIP_DISPLAY_CONVERT]", {
+        slug,
+        dayCount: trip.days.length,
+        totalDistance: trip.totalDistanceKm,
+        totalElevation: trip.totalElevationM,
+        startDate: trip.startDate,
+        timestamp: new Date().toISOString(),
+      });
+    }
 
     // Convert each day to a route with stored route geometry
     const routes = trip.days.map((day: TripDay) => {
@@ -97,15 +101,19 @@ export default function TripDisplayPage() {
         geometrySource = "stored";
       } else {
         // Fallback: use locality names to generate approximate coordinates for older trips
-        console.warn(`[TRIP_DISPLAY_ROUTE_${day.day}] No stored geometry found, using locality-based fallback`);
+        if (process.env.NODE_ENV !== "production") {
+          console.warn(`[TRIP_DISPLAY_ROUTE_${day.day}] No stored geometry found, using locality-based fallback`);
+        }
         
         // Try to generate realistic coordinates based on locality names
         let startCoord: [number, number];
         let endCoord: [number, number];
         
         // Try to generate approximate coordinates based on locality names
-        if (day.startLocality && day.endLocality) {
-          console.log(`[TRIP_DISPLAY_ROUTE_${day.day}] Using localities: ${day.startLocality} -> ${day.endLocality}`);
+                  if (day.startLocality && day.endLocality) {
+            if (process.env.NODE_ENV !== "production") {
+              console.log(`[TRIP_DISPLAY_ROUTE_${day.day}] Using localities: ${day.startLocality} -> ${day.endLocality}`);
+            }
           
           // Known locality coordinates for various regions
           const knownLocalities: Record<string, [number, number]> = {
@@ -170,12 +178,14 @@ export default function TripDisplayPage() {
         };
         geometrySource = "locality-fallback";
         
-        console.log(`[TRIP_DISPLAY_ROUTE_${day.day}] Generated locality-based geometry:`, {
-          startCoord,
-          endCoord,
-          startLocality: day.startLocality,
-          endLocality: day.endLocality,
-        });
+        if (process.env.NODE_ENV !== "production") {
+          console.log(`[TRIP_DISPLAY_ROUTE_${day.day}] Generated locality-based geometry:`, {
+            startCoord,
+            endCoord,
+            startLocality: day.startLocality,
+            endLocality: day.endLocality,
+          });
+        }
       }
 
       const route = {
@@ -188,15 +198,17 @@ export default function TripDisplayPage() {
         segmentNames: day.segments?.map((s: TripSegment) => s.name ?? 'Unknown Segment') ?? [],
       };
 
-      console.log(`[TRIP_DISPLAY_ROUTE_${day.day}]`, {
-        dayNumber: day.day,
-        distanceKm: day.distanceKm,
-        elevationM: day.elevationM,
-        segmentCount: day.segments?.length ?? 0,
-        coordinateCount: geometry.coordinates.length,
-        geometrySource,
-        hasStoredGeometry: !!day.geometry,
-      });
+      if (process.env.NODE_ENV !== "production") {
+        console.log(`[TRIP_DISPLAY_ROUTE_${day.day}]`, {
+          dayNumber: day.day,
+          distanceKm: day.distanceKm,
+          elevationM: day.elevationM,
+          segmentCount: day.segments?.length ?? 0,
+          coordinateCount: geometry.coordinates.length,
+          geometrySource,
+          hasStoredGeometry: !!day.geometry,
+        });
+      }
 
       return route;
     });
@@ -213,13 +225,15 @@ export default function TripDisplayPage() {
       startCoordinate,
     };
 
-    console.log("[TRIP_DISPLAY_CONVERT_SUCCESS]", {
-      slug,
-      routeCount: routes.length,
-      startCoordinate,
-      totalDistance: Math.round(convertedTrip.totalDistanceKm),
-      totalElevation: Math.round(convertedTrip.totalElevationGainM),
-    });
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[TRIP_DISPLAY_CONVERT_SUCCESS]", {
+        slug,
+        routeCount: routes.length,
+        startCoordinate,
+        totalDistance: Math.round(convertedTrip.totalDistanceKm),
+        totalElevation: Math.round(convertedTrip.totalElevationGainM),
+      });
+    }
 
     return convertedTrip;
   }, [trip, slug]);
@@ -229,11 +243,13 @@ export default function TripDisplayPage() {
     if (!trip?.days || !Array.isArray(trip.days)) return;
 
     try {
-      console.log("[TRIP_DISPLAY_GPX_START]", {
-        slug,
-        dayCount: trip.days.length,
-        timestamp: new Date().toISOString(),
-      });
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[TRIP_DISPLAY_GPX_START]", {
+          slug,
+          dayCount: trip.days.length,
+          timestamp: new Date().toISOString(),
+        });
+      }
 
       // Convert trip data to GPX format
       const routesForGPX: RouteForGPX[] = trip.days.map((day: TripDay) => {
@@ -245,15 +261,19 @@ export default function TripDisplayPage() {
           geometry = day.geometry;
         } else {
           // Fallback: use locality names to generate approximate coordinates for older trips
-          console.warn(`[TRIP_GPX_ROUTE_${day.day}] No stored geometry found, using locality-based fallback`);
+          if (process.env.NODE_ENV !== "production") {
+            console.warn(`[TRIP_GPX_ROUTE_${day.day}] No stored geometry found, using locality-based fallback`);
+          }
           
           // Try to generate realistic coordinates based on locality names
           let startCoord: [number, number];
           let endCoord: [number, number];
           
           // Try to generate approximate coordinates based on locality names
-          if (day.startLocality && day.endLocality) {
-            console.log(`[TRIP_GPX_ROUTE_${day.day}] Using localities: ${day.startLocality} -> ${day.endLocality}`);
+                      if (day.startLocality && day.endLocality) {
+              if (process.env.NODE_ENV !== "production") {
+                console.log(`[TRIP_GPX_ROUTE_${day.day}] Using localities: ${day.startLocality} -> ${day.endLocality}`);
+              }
             
             // Known locality coordinates for various regions
             const knownLocalities: Record<string, [number, number]> = {
@@ -316,12 +336,14 @@ export default function TripDisplayPage() {
             coordinates: [startCoord, endCoord],
           };
           
-          console.log(`[TRIP_GPX_ROUTE_${day.day}] Generated locality-based GPX geometry:`, {
-            startCoord,
-            endCoord,
-            startLocality: day.startLocality,
-            endLocality: day.endLocality,
-          });
+          if (process.env.NODE_ENV !== "production") {
+            console.log(`[TRIP_GPX_ROUTE_${day.day}] Generated locality-based GPX geometry:`, {
+              startCoord,
+              endCoord,
+              startLocality: day.startLocality,
+              endLocality: day.endLocality,
+            });
+          }
         }
 
         return {
@@ -341,11 +363,13 @@ export default function TripDisplayPage() {
       const tripStartDate = new Date(trip.startDate);
       await downloadRoutesAsZip(routesForGPX, tripStartDate);
 
-      console.log("[TRIP_DISPLAY_GPX_SUCCESS]", {
-        slug,
-        routeCount: routesForGPX.length,
-        startDate: tripStartDate.toISOString(),
-      });
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[TRIP_DISPLAY_GPX_SUCCESS]", {
+          slug,
+          routeCount: routesForGPX.length,
+          startDate: tripStartDate.toISOString(),
+        });
+      }
 
       toast({
         title: "📁 Download Started!",
@@ -366,7 +390,9 @@ export default function TripDisplayPage() {
   const handleCopyShareLink = () => {
     const currentUrl = window.location.href;
     void navigator.clipboard.writeText(currentUrl).then(() => {
-      console.log("[TRIP_DISPLAY_SHARE_SUCCESS]", { slug, url: currentUrl });
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[TRIP_DISPLAY_SHARE_SUCCESS]", { slug, url: currentUrl });
+      }
       toast({
         title: "🔗 Link copied!",
         description: "Trip share link copied to clipboard",

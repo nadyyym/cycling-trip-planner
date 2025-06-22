@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { env } from "~/env";
 import { SegmentListSidebar } from "../_components/SegmentListSidebar";
@@ -30,8 +29,7 @@ import { getDayColorsArray } from "~/lib/mapUtils";
 import { useRouter } from "next/navigation";
 import { useTripConstraintStore } from "../_hooks/useTripConstraintStore";
 
-// Mapbox access token
-mapboxgl.accessToken = env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
+// Dynamic mapbox import - will be loaded when needed
 
 interface MapboxGeocodingResponse {
   features: Array<{
@@ -51,11 +49,21 @@ interface MapboxSuggestion {
 export default function ExplorePage() {
   // Map-related state
   const mapContainer = useRef<HTMLDivElement>(null);
-  const map = useRef<mapboxgl.Map | null>(null);
+  const map = useRef<any>(null);
   const mapInitialized = useRef(false);
-  const [lng, setLng] = useState(-0.1276); // London coordinates as fallback
-  const [lat, setLat] = useState(51.5074);
-  const [zoom, setZoom] = useState(10);
+  
+  // Use refs for map coordinates to avoid re-renders on every map move
+  const lngRef = useRef(-0.1276); // London coordinates as fallback
+  const latRef = useRef(51.5074);
+  const zoomRef = useRef(10);
+  
+  // State for displaying coordinates (throttled updates)
+  const [displayCoords, setDisplayCoords] = useState({
+    lng: lngRef.current,
+    lat: latRef.current,
+    zoom: zoomRef.current,
+  });
+
   const [mapError, setMapError] = useState<string | null>(null);
 
   // Location-related state
@@ -105,6 +113,7 @@ export default function ExplorePage() {
   // Segment exploration hook
   const {
     segments,
+    segmentsGeoJSON,
     isLoading: isLoadingSegments,
     error: segmentError,
   } = useSegmentExplore(debouncedBounds);
@@ -137,10 +146,7 @@ export default function ExplorePage() {
   // Reference to track if initial segment search has been performed
   const hasInitialSegmentSearch = useRef(false);
 
-  // Initialize Mapbox access token
-  useEffect(() => {
-    mapboxgl.accessToken = env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
-  }, []);
+  // Initialize Mapbox access token - handled in dynamic import
 
   // Check location permission and try to get user location on mount
   useEffect(() => {
@@ -181,12 +187,14 @@ export default function ExplorePage() {
         );
 
         const { latitude, longitude } = position.coords;
-        console.log("Got user location:", { latitude, longitude });
+        if (process.env.NODE_ENV !== "production") {
+          console.log("Got user location:", { latitude, longitude });
+        }
 
         // Update coordinates and zoom to user location
-        setLat(latitude);
-        setLng(longitude);
-        setZoom(12);
+        lngRef.current = longitude;
+        latRef.current = latitude;
+        zoomRef.current = 12;
 
         // If map is initialized, fly to the new location
         if (map.current) {
@@ -204,15 +212,21 @@ export default function ExplorePage() {
         // Cache results for 1 hour to avoid excessive API calls
         // ================================================
         try {
-          console.log("Starting reverse geocoding for user location...");
+          if (process.env.NODE_ENV !== "production") {
+            console.log("Starting reverse geocoding for user location...");
+          }
           const locationInfo = await reverseGeocode([longitude, latitude]);
           setCurrentLocationInfo(locationInfo);
-          console.log(
-            "Reverse geocoding successful:",
-            locationInfo.displayName,
-          );
+          if (process.env.NODE_ENV !== "production") {
+            console.log(
+              "Reverse geocoding successful:",
+              locationInfo.displayName,
+            );
+          }
         } catch (error) {
-          console.warn("Reverse geocoding failed:", error);
+          if (process.env.NODE_ENV !== "production") {
+            console.warn("Reverse geocoding failed:", error);
+          }
           // Keep currentLocationInfo as null for fallback behavior
         }
       } catch (error) {
@@ -232,22 +246,36 @@ export default function ExplorePage() {
     // Prevent multiple map initializations
     if (mapInitialized.current || !mapContainer.current) return;
 
-    console.log("Initializing map with coordinates:", { lng, lat, zoom });
+    if (process.env.NODE_ENV !== "production") {
+      console.log("Initializing map with coordinates:", { lng: lngRef.current, lat: latRef.current, zoom: zoomRef.current });
+    }
 
-    try {
-      mapInitialized.current = true;
-      map.current = new mapboxgl.Map({
-        container: mapContainer.current,
-        style: "mapbox://styles/mapbox/streets-v12",
-        center: [lng, lat],
-        zoom: zoom,
-      });
+    const initializeMap = async () => {
+      try {
+        const mapboxgl = (await import("mapbox-gl")).default;
 
-      console.log("Map created successfully");
+        // Initialize Mapbox token
+        if (env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN && !mapboxgl.accessToken) {
+          mapboxgl.accessToken = env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
+        }
+
+        mapInitialized.current = true;
+        map.current = new mapboxgl.Map({
+          container: mapContainer.current!,
+          style: "mapbox://styles/mapbox/streets-v12",
+          center: [lngRef.current, latRef.current],
+          zoom: zoomRef.current,
+        });
+
+      if (process.env.NODE_ENV !== "production") {
+        console.log("Map created successfully");
+      }
 
       // Wait for map to load before setting up event listeners
       map.current.on("load", () => {
-        console.log("Map loaded successfully");
+        if (process.env.NODE_ENV !== "production") {
+          console.log("Map loaded successfully");
+        }
 
         // ==== AUTOMATIC INITIAL SEGMENT SEARCH (Step 1) ====
         // This fires an initial search when the map first loads to show
@@ -267,7 +295,9 @@ export default function ExplorePage() {
 
           // Helpful console statement for QA instrumentation
           // (to be replaced with analytics event in the future).
-          console.log("[SEGMENT_SEARCH_AUTO]");
+          if (process.env.NODE_ENV !== "production") {
+            console.log("[SEGMENT_SEARCH_AUTO]");
+          }
         }
 
         // Update state when map moves - debounced to prevent excessive updates
@@ -283,11 +313,18 @@ export default function ExplorePage() {
               const currentZoom = map.current.getZoom();
               const currentBounds = map.current.getBounds();
 
-              setLng(Number(center.lng.toFixed(4)));
-              setLat(Number(center.lat.toFixed(4)));
-              setZoom(Number(currentZoom.toFixed(2)));
+               lngRef.current = Number(center.lng.toFixed(4));
+               latRef.current = Number(center.lat.toFixed(4));
+               zoomRef.current = Number(currentZoom.toFixed(2));
 
-              // Update map bounds for segment exploration
+               // Throttled update for display coordinates (less frequent re-renders)
+               setDisplayCoords({
+                 lng: lngRef.current,
+                 lat: latRef.current,
+                 zoom: zoomRef.current,
+               });
+
+               // Update map bounds for segment exploration
               if (currentBounds) {
                 setMapBounds({
                   sw: [currentBounds.getSouth(), currentBounds.getWest()],
@@ -299,23 +336,30 @@ export default function ExplorePage() {
         });
 
         // Log map interactions for debugging
-        map.current!.on("dragstart", () => console.log("Map drag started"));
-        map.current!.on("dragend", () => console.log("Map drag ended"));
-        map.current!.on("zoomstart", () => console.log("Map zoom started"));
-        map.current!.on("zoomend", () => console.log("Map zoom ended"));
+        if (process.env.NODE_ENV !== "production") {
+          map.current!.on("dragstart", () => console.log("Map drag started"));
+          map.current!.on("dragend", () => console.log("Map drag ended"));
+          map.current!.on("zoomstart", () => console.log("Map zoom started"));
+          map.current!.on("zoomend", () => console.log("Map zoom ended"));
+        }
       });
-    } catch (error) {
-      console.error("Failed to initialize map:", error);
-      setMapError(
-        "Failed to initialize map. Please check your internet connection.",
-      );
-    }
+      } catch (error) {
+        console.error("Failed to initialize map:", error);
+        setMapError(
+          "Failed to initialize map. Please check your internet connection.",
+        );
+      }
+    };
+
+    void initializeMap();
 
     // Cleanup function
     return () => {
       if (map.current) {
         try {
-          console.log("Cleaning up map");
+          if (process.env.NODE_ENV !== "production") {
+            console.log("Cleaning up map");
+          }
           // Check if map is still loaded before attempting to remove
           if (map.current.isStyleLoaded && map.current.isStyleLoaded()) {
             map.current.remove();
@@ -324,14 +368,16 @@ export default function ExplorePage() {
             map.current.getCanvas()?.remove();
           }
         } catch (error) {
-          console.warn("Error removing map (this is usually harmless during development):", error);
+          if (process.env.NODE_ENV !== "production") {
+            console.warn("Error removing map (this is usually harmless during development):", error);
+          }
         } finally {
           map.current = null;
           mapInitialized.current = false;
         }
       }
     };
-  }, [lat, lng, zoom]); // Include coordinates but handle them carefully to avoid excessive re-renders
+  }, []);
 
   // Update segments on map when data changes
   useEffect(() => {
@@ -340,67 +386,75 @@ export default function ExplorePage() {
     // Always show explore segments (no more tabs)
     const currentSegments = segments;
 
-    // Remove existing source and layers if they exist
-    try {
-      if (map.current.getSource("segments")) {
-        if (map.current.getLayer("segments-highlighted")) {
-          map.current.removeLayer("segments-highlighted");
-        }
-        if (map.current.getLayer("segments-line")) {
-          map.current.removeLayer("segments-line");
-        }
-        map.current.removeSource("segments");
-      }
-
-      // If no segments, just clear the map
-      if (!currentSegments.length) {
+    // If no segments, just clear the map
+    if (!currentSegments.length) {
+      if (process.env.NODE_ENV !== "production") {
         console.log(`Cleared map - no segments to display`);
-        return;
+      }
+      // Update existing source with empty data instead of removing
+      const existingSource = map.current.getSource("segments");
+      if (existingSource) {
+        existingSource.setData({
+          type: "FeatureCollection",
+          features: [],
+        });
+      }
+      return;
+    }
+
+    const geoJsonData = segmentsGeoJSON;
+
+    try {
+      // Update or create source
+      const existingSource = map.current.getSource("segments");
+      if (existingSource) {
+        // Update existing source data
+        existingSource.setData(geoJsonData);
+      } else {
+        // Create new source and layers
+        map.current.addSource("segments", {
+          type: "geojson",
+          data: geoJsonData,
+        });
+
+        // Add the segment lines layer
+        map.current.addLayer({
+          id: "segments-line",
+          type: "line",
+          source: "segments",
+          layout: {
+            "line-join": "round",
+            "line-cap": "round",
+          },
+          paint: {
+            "line-color": "#10b981", // Green for segments
+            "line-width": 4,
+          },
+        });
+
+        // Add a layer for highlighted segments
+        map.current.addLayer({
+          id: "segments-highlighted",
+          type: "line",
+          source: "segments",
+          layout: {
+            "line-join": "round",
+            "line-cap": "round",
+          },
+          paint: {
+            "line-color": "#ec4899", // Pink color for highlighted segments
+            "line-width": 3,
+          },
+          filter: ["==", ["get", "id"], ""], // Initially no segments highlighted
+        });
       }
 
-      const geoJsonData = segmentsToGeoJSON(currentSegments);
-
-      // Add source and layers
-      map.current.addSource("segments", {
-        type: "geojson",
-        data: geoJsonData,
-      });
-
-      // Add the segment lines layer
-      map.current.addLayer({
-        id: "segments-line",
-        type: "line",
-        source: "segments",
-        layout: {
-          "line-join": "round",
-          "line-cap": "round",
-        },
-        paint: {
-          "line-color": "#10b981", // Green for segments
-          "line-width": 4,
-        },
-      });
-
-      // Add a layer for highlighted segments
-      map.current.addLayer({
-        id: "segments-highlighted",
-        type: "line",
-        source: "segments",
-        layout: {
-          "line-join": "round",
-          "line-cap": "round",
-        },
-        paint: {
-          "line-color": "#ec4899", // Pink color for highlighted segments
-          "line-width": 3,
-        },
-        filter: ["==", ["get", "id"], ""], // Initially no segments highlighted
-      });
-
-      console.log(`Added ${currentSegments.length} segments to map`);
+      if (process.env.NODE_ENV !== "production") {
+        console.log(`Added ${currentSegments.length} segments to map`);
+      }
 
       // Add hover event listeners for map tooltips
-      map.current.on("mouseenter", "segments-line", (e) => {
+      map.current.on("mouseenter", "segments-line", (e: any) => {
         if (!e.features?.[0]) return;
 
         const feature = e.features[0];
@@ -429,7 +483,7 @@ export default function ExplorePage() {
       });
 
       // Update tooltip position on mouse move
-      map.current.on("mousemove", "segments-line", (e) => {
+      map.current.on("mousemove", "segments-line", (e: any) => {
         setMapTooltip((prev) => ({
           ...prev,
           x: e.point.x,
@@ -481,39 +535,53 @@ export default function ExplorePage() {
     // Define colors for different days using centralized colors
     const dayColors = getDayColorsArray(); // ["#6366f1", "#10b981", "#f97316", "#ec4899"]
 
+    // Helper function to remove all trip route layers and sources dynamically
+    const removeAllTripRouteLayers = () => {
+      const style = map.current!.getStyle();
+      if (!style?.sources) return;
+
+      // Get all source IDs that match trip route patterns
+      const tripSourceIds = Object.keys(style.sources).filter(id => 
+        id.startsWith('trip-route-day-') || 
+        id === 'trip-start-marker-source'
+      );
+
+      // Remove associated layers first
+      tripSourceIds.forEach(sourceId => {
+        const layerId = sourceId.replace('-source', '');
+        
+        [layerId, 'trip-start-marker'].forEach(id => {
+          if (map.current!.getLayer(id)) {
+            map.current!.removeLayer(id);
+          }
+        });
+      });
+
+      // Then remove sources
+      tripSourceIds.forEach(sourceId => {
+        if (map.current!.getSource(sourceId)) {
+          map.current!.removeSource(sourceId);
+        }
+      });
+    };
+
     // Remove existing trip route layers and sources
     try {
-      for (let i = 1; i <= 7; i++) {
-        const layerId = `trip-route-day-${i}`;
-        const sourceId = `trip-route-day-${i}-source`;
-        
-        if (map.current.getLayer(layerId)) {
-          map.current.removeLayer(layerId);
-        }
-        if (map.current.getSource(sourceId)) {
-          map.current.removeSource(sourceId);
-        }
-      }
-
-      // Remove trip start marker if it exists
-      if (map.current.getLayer("trip-start-marker")) {
-        map.current.removeLayer("trip-start-marker");
-      }
-      if (map.current.getSource("trip-start-marker-source")) {
-        map.current.removeSource("trip-start-marker-source");
-      }
+      removeAllTripRouteLayers();
     } catch (error) {
       console.warn("Error removing existing trip route layers:", error);
     }
 
     // Add new trip routes if available and visible
     if (currentTrip && routesVisible) {
-      console.log("[TRIP_ROUTES_DISPLAY]", {
-        routeCount: currentTrip.routes.length,
-        totalDistance: Math.round(currentTrip.totalDistanceKm),
-        startCoordinate: currentTrip.startCoordinate,
-        timestamp: new Date().toISOString(),
-      });
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[TRIP_ROUTES_DISPLAY]", {
+          routeCount: currentTrip.routes.length,
+          totalDistance: Math.round(currentTrip.totalDistanceKm),
+          startCoordinate: currentTrip.startCoordinate,
+          timestamp: new Date().toISOString(),
+        });
+      }
 
       try {
         // Add route lines for each day
@@ -554,13 +622,15 @@ export default function ExplorePage() {
             },
           });
 
-          console.log(`[TRIP_ROUTE_DAY_ADDED]`, {
-            dayNumber,
-            color,
-            coordinateCount: route.geometry.coordinates.length,
-            distance: Math.round(route.distanceKm),
-            elevation: Math.round(route.elevationGainM),
-          });
+          if (process.env.NODE_ENV !== "production") {
+            console.log(`[TRIP_ROUTE_DAY_ADDED]`, {
+              dayNumber,
+              color,
+              coordinateCount: route.geometry.coordinates.length,
+              distance: Math.round(route.distanceKm),
+              elevation: Math.round(route.elevationGainM),
+            });
+          }
         });
 
         // Add start point marker if available
@@ -598,17 +668,21 @@ export default function ExplorePage() {
             essential: true,
           });
 
-          console.log("[TRIP_START_MARKER_ADDED]", {
-            coordinate: currentTrip.startCoordinate,
+          if (process.env.NODE_ENV !== "production") {
+            console.log("[TRIP_START_MARKER_ADDED]", {
+              coordinate: currentTrip.startCoordinate,
+              timestamp: new Date().toISOString(),
+            });
+          }
+        }
+
+        if (process.env.NODE_ENV !== "production") {
+          console.log(`[TRIP_ROUTES_COMPLETE]`, {
+            routesAdded: currentTrip.routes.length,
+            hasStartMarker: !!currentTrip.startCoordinate,
             timestamp: new Date().toISOString(),
           });
         }
-
-        console.log(`[TRIP_ROUTES_COMPLETE]`, {
-          routesAdded: currentTrip.routes.length,
-          hasStartMarker: !!currentTrip.startCoordinate,
-          timestamp: new Date().toISOString(),
-        });
       } catch (error) {
         console.error("Error adding trip routes to map:", error);
       }
@@ -618,7 +692,9 @@ export default function ExplorePage() {
   const handleSearch = async () => {
     if (!searchValue.trim() || !map.current) return;
 
-    console.log("Searching for location:", searchValue);
+    if (process.env.NODE_ENV !== "production") {
+      console.log("Searching for location:", searchValue);
+    }
 
     try {
       // Use Mapbox Geocoding API directly
@@ -636,7 +712,9 @@ export default function ExplorePage() {
 
       if (data.features?.[0]) {
         const [lng, lat] = data.features[0].center;
-        console.log("Flying to search result:", { lng, lat });
+        if (process.env.NODE_ENV !== "production") {
+          console.log("Flying to search result:", { lng, lat });
+        }
 
         map.current.flyTo({
           center: [lng, lat],
@@ -644,7 +722,9 @@ export default function ExplorePage() {
           essential: true,
         });
       } else {
-        console.warn("No results found for:", searchValue);
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("No results found for:", searchValue);
+        }
       }
     } catch (error) {
       console.error("Search failed:", error);
@@ -670,10 +750,12 @@ export default function ExplorePage() {
     if (!map.current) return;
 
     const [lng, lat] = suggestion.center;
-    console.log("Flying to autocomplete suggestion:", {
-      suggestion: suggestion.place_name,
-      coordinates: { lng, lat },
-    });
+    if (process.env.NODE_ENV !== "production") {
+      console.log("Flying to autocomplete suggestion:", {
+        suggestion: suggestion.place_name,
+        coordinates: { lng, lat },
+      });
+    }
 
     map.current.flyTo({
       center: [lng, lat],
@@ -687,12 +769,14 @@ export default function ExplorePage() {
 
   const handlePlanTrip = () => {
     const selectedSegmentIds_array = Array.from(selectedSegmentIds);
-    console.log("[EXPLORE_PLAN_TRIP]", {
-      selectedSegmentCount: selectedSegmentIds.size,
-      segmentIds: selectedSegmentIds_array,
-      constraints,
-      timestamp: new Date().toISOString(),
-    });
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[EXPLORE_PLAN_TRIP]", {
+        selectedSegmentCount: selectedSegmentIds.size,
+        segmentIds: selectedSegmentIds_array,
+        constraints,
+        timestamp: new Date().toISOString(),
+      });
+    }
 
     // Navigate to new-trip page with selected segment IDs as URL parameters
     const segmentParams = selectedSegmentIds_array.join(',');

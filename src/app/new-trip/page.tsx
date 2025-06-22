@@ -68,17 +68,19 @@ function NewTripPageContent() {
       constraints.startDate &&
       constraints.endDate
     ) {
-      console.log("[NEW_TRIP_AUTO_START]", {
-        segmentCount: segmentIds.length,
-        segmentIds: segmentIds,
-        constraints: {
-          startDate: constraints.startDate,
-          endDate: constraints.endDate,
-          maxDailyDistanceKm: constraints.maxDailyDistanceKm,
-          maxDailyElevationM: constraints.maxDailyElevationM,
-        },
-        timestamp: new Date().toISOString(),
-      });
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[NEW_TRIP_AUTO_START]", {
+          segmentCount: segmentIds.length,
+          segmentIds: segmentIds,
+          constraints: {
+            startDate: constraints.startDate,
+            endDate: constraints.endDate,
+            maxDailyDistanceKm: constraints.maxDailyDistanceKm,
+            maxDailyElevationM: constraints.maxDailyElevationM,
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
 
       planningAttempted.current = true;
 
@@ -108,11 +110,13 @@ function NewTripPageContent() {
   // Update trip route store when planning succeeds and center map
   useEffect(() => {
     if (isSuccess && data?.ok && data !== lastProcessedData.current) {
-      console.log("[NEW_TRIP_SUCCESS]", {
-        routeCount: data.routes.length,
-        totalDistance: Math.round(data.totalDistanceKm),
-        timestamp: new Date().toISOString(),
-      });
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[NEW_TRIP_SUCCESS]", {
+          routeCount: data.routes.length,
+          totalDistance: Math.round(data.totalDistanceKm),
+          timestamp: new Date().toISOString(),
+        });
+      }
 
       // Mark this data as processed to prevent re-processing
       lastProcessedData.current = data;
@@ -153,12 +157,14 @@ function NewTripPageContent() {
   // Update trip route store with saved trip data
   useEffect(() => {
     if (isSaved && savedTrip && savedTrip !== lastProcessedSavedTrip.current) {
-      console.log("[NEW_TRIP_SAVED]", {
-        slug: savedTrip.slug,
-        shareUrl: savedTrip.shareUrl,
-        dayCount: savedTrip.days.length,
-        timestamp: new Date().toISOString(),
-      });
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[NEW_TRIP_SAVED]", {
+          slug: savedTrip.slug,
+          shareUrl: savedTrip.shareUrl,
+          dayCount: savedTrip.days.length,
+          timestamp: new Date().toISOString(),
+        });
+      }
 
       // Mark this saved trip as processed
       lastProcessedSavedTrip.current = savedTrip;

@@ -2,6 +2,53 @@ import polyline from "@mapbox/polyline";
 import { type SegmentDTO } from "~/server/integrations/strava";
 
 /**
+ * Simple LRU cache for polyline decoding
+ */
+class PolylineCache {
+  private cache = new Map<string, [number, number][]>();
+  private maxSize: number;
+
+  constructor(maxSize = 5000) {
+    this.maxSize = maxSize;
+  }
+
+  get(key: string): [number, number][] | undefined {
+    const value = this.cache.get(key);
+    if (value) {
+      // Move to end (most recently used)
+      this.cache.delete(key);
+      this.cache.set(key, value);
+    }
+    return value;
+  }
+
+  set(key: string, value: [number, number][]): void {
+    if (this.cache.has(key)) {
+      // Update existing
+      this.cache.delete(key);
+    } else if (this.cache.size >= this.maxSize) {
+      // Remove least recently used (first item)
+      const firstKey = this.cache.keys().next().value;
+      if (firstKey) {
+        this.cache.delete(firstKey);
+      }
+    }
+    this.cache.set(key, value);
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+
+  size(): number {
+    return this.cache.size;
+  }
+}
+
+// Global polyline cache instance
+const polylineCache = new PolylineCache(5000);
+
+/**
  * GeoJSON feature for a segment
  */
 export interface SegmentGeoJSONFeature {
@@ -33,10 +80,12 @@ export function segmentsToGeoJSON(segments: SegmentDTO[]) {
   let polylineFailureCount = 0;
   const fallbackSegments: string[] = [];
 
-  console.log(`[MAPBOX_GEOJSON_CONVERSION_START]`, {
-    segmentCount: segments.length,
-    timestamp: new Date().toISOString(),
-  });
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`[MAPBOX_GEOJSON_CONVERSION_START]`, {
+      segmentCount: segments.length,
+      timestamp: new Date().toISOString(),
+    });
+  }
 
   const features: SegmentGeoJSONFeature[] = segments.map((segment) => {
     let coordinates: [number, number][];
@@ -50,26 +99,30 @@ export function segmentsToGeoJSON(segments: SegmentDTO[]) {
 
         polylineSuccessCount++;
 
-        console.log(`[MAPBOX_POLYLINE_DECODE_SUCCESS]`, {
-          segmentId: segment.id,
-          segmentName: segment.name,
-          polylineLength: segment.polyline.length,
-          coordinateCount: coordinates.length,
-          decodeDuration: `${decodeDuration}ms`,
-          timestamp: new Date().toISOString(),
-        });
+        if (process.env.NODE_ENV !== "production") {
+          console.log(`[MAPBOX_POLYLINE_DECODE_SUCCESS]`, {
+            segmentId: segment.id,
+            segmentName: segment.name,
+            polylineLength: segment.polyline.length,
+            coordinateCount: coordinates.length,
+            decodeDuration: `${decodeDuration}ms`,
+            timestamp: new Date().toISOString(),
+          });
+        }
       } catch (error) {
         polylineFailureCount++;
         fallbackSegments.push(segment.id);
 
-        console.warn(`[MAPBOX_POLYLINE_DECODE_ERROR]`, {
-          segmentId: segment.id,
-          segmentName: segment.name,
-          polylineLength: segment.polyline?.length,
-          error: error instanceof Error ? error.message : "Unknown error",
-          fallbackUsed: true,
-          timestamp: new Date().toISOString(),
-        });
+        if (process.env.NODE_ENV !== "production") {
+          console.warn(`[MAPBOX_POLYLINE_DECODE_ERROR]`, {
+            segmentId: segment.id,
+            segmentName: segment.name,
+            polylineLength: segment.polyline?.length,
+            error: error instanceof Error ? error.message : "Unknown error",
+            fallbackUsed: true,
+            timestamp: new Date().toISOString(),
+          });
+        }
 
         // Fall back to straight line
         coordinates = [
@@ -111,19 +164,21 @@ export function segmentsToGeoJSON(segments: SegmentDTO[]) {
       ? ((polylineSuccessCount / segments.length) * 100).toFixed(1)
       : 0;
 
-  console.log(`[MAPBOX_GEOJSON_CONVERSION_COMPLETE]`, {
-    segmentCount: segments.length,
-    polylineSuccessCount,
-    polylineFailureCount,
-    polylineSuccessRate: `${polylineSuccessRate}%`,
-    fallbackSegments,
-    totalDuration: `${totalDuration}ms`,
-    avgProcessingTime:
-      segments.length > 0
-        ? `${Math.round(totalDuration / segments.length)}ms`
-        : "0ms",
-    timestamp: new Date().toISOString(),
-  });
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`[MAPBOX_GEOJSON_CONVERSION_COMPLETE]`, {
+      segmentCount: segments.length,
+      polylineSuccessCount,
+      polylineFailureCount,
+      polylineSuccessRate: `${polylineSuccessRate}%`,
+      fallbackSegments,
+      totalDuration: `${totalDuration}ms`,
+      avgProcessingTime:
+        segments.length > 0
+          ? `${Math.round(totalDuration / segments.length)}ms`
+          : "0ms",
+      timestamp: new Date().toISOString(),
+    });
+  }
 
   return {
     type: "FeatureCollection" as const,
@@ -132,14 +187,26 @@ export function segmentsToGeoJSON(segments: SegmentDTO[]) {
 }
 
 /**
- * Decode Google/Strava polyline to coordinate array
+ * Decode Google/Strava polyline to coordinate array with caching
  * @param encoded - Encoded polyline string
  * @returns Array of [longitude, latitude] coordinates
  */
 function decodePolyline(encoded: string): [number, number][] {
+  // Check cache first
+  const cached = polylineCache.get(encoded);
+  if (cached) {
+    return cached;
+  }
+
+  // Decode and cache result
   const decoded = polyline.decode(encoded);
   // polyline.decode returns [lat, lng] but we need [lng, lat] for GeoJSON
-  return decoded.map((coord) => [coord[1], coord[0]]);
+  const coordinates = decoded.map((coord) => [coord[1], coord[0]]) as [number, number][];
+  
+  // Cache the result
+  polylineCache.set(encoded, coordinates);
+  
+  return coordinates;
 }
 
 /**
@@ -153,12 +220,14 @@ export function getSegmentBounds(
   const startTime = Date.now();
   const padding = 0.001; // Small padding around the segment
 
-  console.log(`[MAPBOX_SEGMENT_BOUNDS_START]`, {
-    segmentId: segment.id,
-    segmentName: segment.name,
-    hasPolyline: !!segment.polyline,
-    timestamp: new Date().toISOString(),
-  });
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`[MAPBOX_SEGMENT_BOUNDS_START]`, {
+      segmentId: segment.id,
+      segmentName: segment.name,
+      hasPolyline: !!segment.polyline,
+      timestamp: new Date().toISOString(),
+    });
+  }
 
   let coordinates: [number, number][];
   let usedPolyline = false;
@@ -168,12 +237,14 @@ export function getSegmentBounds(
       coordinates = decodePolyline(segment.polyline);
       usedPolyline = true;
     } catch (error) {
-      console.warn(`[MAPBOX_BOUNDS_POLYLINE_ERROR]`, {
-        segmentId: segment.id,
-        error: error instanceof Error ? error.message : "Unknown error",
-        fallbackUsed: true,
-        timestamp: new Date().toISOString(),
-      });
+      if (process.env.NODE_ENV !== "production") {
+        console.warn(`[MAPBOX_BOUNDS_POLYLINE_ERROR]`, {
+          segmentId: segment.id,
+          error: error instanceof Error ? error.message : "Unknown error",
+          fallbackUsed: true,
+          timestamp: new Date().toISOString(),
+        });
+      }
 
       // Fall back to start/end points
       coordinates = [
@@ -205,16 +276,18 @@ export function getSegmentBounds(
 
   const duration = Date.now() - startTime;
 
-  console.log(`[MAPBOX_SEGMENT_BOUNDS_COMPLETE]`, {
-    segmentId: segment.id,
-    segmentName: segment.name,
-    usedPolyline,
-    coordinateCount: coordinates.length,
-    bounds,
-    boundsArea: Math.abs((maxLng - minLng) * (maxLat - minLat)),
-    duration: `${duration}ms`,
-    timestamp: new Date().toISOString(),
-  });
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`[MAPBOX_SEGMENT_BOUNDS_COMPLETE]`, {
+      segmentId: segment.id,
+      segmentName: segment.name,
+      usedPolyline,
+      coordinateCount: coordinates.length,
+      bounds,
+      boundsArea: Math.abs((maxLng - minLng) * (maxLat - minLat)),
+      duration: `${duration}ms`,
+      timestamp: new Date().toISOString(),
+    });
+  }
 
   return bounds;
 }
@@ -226,12 +299,14 @@ export function getSegmentCenter(segment: SegmentDTO): [number, number] {
   const centerLng = (segment.lonStart + segment.lonEnd) / 2;
   const centerLat = (segment.latStart + segment.latEnd) / 2;
 
-  console.log(`[MAPBOX_SEGMENT_CENTER]`, {
-    segmentId: segment.id,
-    segmentName: segment.name,
-    center: [centerLng, centerLat],
-    timestamp: new Date().toISOString(),
-  });
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`[MAPBOX_SEGMENT_CENTER]`, {
+      segmentId: segment.id,
+      segmentName: segment.name,
+      center: [centerLng, centerLat],
+      timestamp: new Date().toISOString(),
+    });
+  }
 
   return [centerLng, centerLat];
 }
