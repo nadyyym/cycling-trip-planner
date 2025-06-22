@@ -11,6 +11,8 @@ import { useTripPlanner } from "~/app/_hooks/useTripPlanner";
 import { buildSavePayload } from "~/lib/tripUtils";
 import { useTripConstraintStore } from "~/app/_hooks/useTripConstraintStore";
 import { useTripRouteStore } from "~/app/_hooks/useTripRouteStore";
+import { SignInModal } from "./SignInModal";
+import { useRequireAuth } from "../_hooks/useRequireAuth";
 
 interface RouteListSidebarProps {
   /** Whether the trip planning is in progress */
@@ -38,49 +40,66 @@ export function RouteListSidebar({
   const { constraints } = useTripConstraintStore();
   const { setSavedTripData } = useTripRouteStore();
 
-  // Handle GPX download
-  const handleDownloadGPX = async () => {
+  // Auth guards for save itinerary and download GPX
+  const saveAuthGuard = useRequireAuth("itinerary-save");
+  const downloadAuthGuard = useRequireAuth("gpx-download");
+
+  // Handle GPX download with auth guard
+  const handleDownloadGPX = () => {
     if (!currentTrip || !planResponse?.ok) return;
 
-    try {
-      // Convert current trip data to GPX format with locality names when available
-      const routesForGPX: RouteForGPX[] = currentTrip.routes.map((route) => {
-        // Find saved day data for this route
-        const savedDayData = currentTrip.savedTripData?.days.find(d => d.day === route.dayNumber);
-        
-        return {
-          dayNumber: route.dayNumber,
-          geometry: route.geometry,
-          distanceKm: route.distanceKm,
-          elevationGainM: route.elevationGainM, // Legacy field for backward compatibility
-          ascentM: route.ascentM,
-          descentM: route.descentM,
-          segmentNames: route.segmentNames,
-          // Include locality names and formatted day name if available
-          startLocality: savedDayData?.startLocality,
-          endLocality: savedDayData?.endLocality,
-          dayName: savedDayData?.dayName,
-        };
+    downloadAuthGuard.requireAuth(() => {
+      console.log("[GPX_DOWNLOAD_ATTEMPT]", {
+        routeCount: currentTrip.routes.length,
+        totalDistanceKm: currentTrip.totalDistanceKm,
+        timestamp: new Date().toISOString(),
       });
 
-      // Get trip start date from constraints if available
-      const tripStartDate = currentTrip.savedTripData ? new Date() : undefined; // TODO: Get actual start date from constraints
+      // Handle async download operation
+      const performDownload = async () => {
+        try {
+          // Convert current trip data to GPX format with locality names when available
+          const routesForGPX: RouteForGPX[] = currentTrip.routes.map((route) => {
+            // Find saved day data for this route
+            const savedDayData = currentTrip.savedTripData?.days.find(d => d.day === route.dayNumber);
+            
+            return {
+              dayNumber: route.dayNumber,
+              geometry: route.geometry,
+              distanceKm: route.distanceKm,
+              elevationGainM: route.elevationGainM, // Legacy field for backward compatibility
+              ascentM: route.ascentM,
+              descentM: route.descentM,
+              segmentNames: route.segmentNames,
+              // Include locality names and formatted day name if available
+              startLocality: savedDayData?.startLocality,
+              endLocality: savedDayData?.endLocality,
+              dayName: savedDayData?.dayName,
+            };
+          });
 
-      await downloadRoutesAsZip(routesForGPX, tripStartDate);
+          // Get trip start date from constraints if available
+          const tripStartDate = currentTrip.savedTripData ? new Date() : undefined; // TODO: Get actual start date from constraints
 
-      toast({
-        title: "📁 Download Started!",
-        description: `Downloading ${routesForGPX.length} daily routes as GPX files`,
-        variant: "default",
-      });
-    } catch (error) {
-      console.error('GPX download failed:', error);
-      toast({
-        title: "❌ Download Failed",
-        description: "Failed to generate GPX files",
-        variant: "destructive",
-      });
-    }
+          await downloadRoutesAsZip(routesForGPX, tripStartDate);
+
+          toast({
+            title: "📁 Download Started!",
+            description: `Downloading ${routesForGPX.length} daily routes as GPX files`,
+            variant: "default",
+          });
+        } catch (error) {
+          console.error('GPX download failed:', error);
+          toast({
+            title: "❌ Download Failed",
+            description: "Failed to generate GPX files",
+            variant: "destructive",
+          });
+        }
+      };
+
+      void performDownload();
+    });
   };
 
   // Handle copy share link
@@ -102,10 +121,12 @@ export function RouteListSidebar({
     }
   };
 
-  // Handle save trip
+  // Handle save trip with auth guard
   const handleSaveTrip = () => {
-    if (planResponse?.ok) {
-      console.log("[UI_SAVE_CLICK]", {
+    if (!planResponse?.ok) return;
+
+    saveAuthGuard.requireAuth(() => {
+      console.log("[ITINERARY_SAVE_ATTEMPT]", {
         routeCount: planResponse.routes.length,
         totalDistanceKm: planResponse.totalDistanceKm,
         timestamp: new Date().toISOString(),
@@ -113,7 +134,7 @@ export function RouteListSidebar({
 
       const savePayload = buildSavePayload(planResponse, constraints);
       saveTrip(savePayload);
-    }
+    });
   };
 
   // Update trip route store when trip is saved
@@ -421,6 +442,20 @@ Generated by Cycling Trip Planner`;
           </div>
         )}
       </div>
+
+      {/* Sign-in modals for save and download actions */}
+      <SignInModal
+        isOpen={saveAuthGuard.isModalOpen}
+        onClose={saveAuthGuard.onModalClose}
+        triggerSource={saveAuthGuard.triggerSource}
+        onSignInSuccess={saveAuthGuard.onSignInSuccess}
+      />
+      <SignInModal
+        isOpen={downloadAuthGuard.isModalOpen}
+        onClose={downloadAuthGuard.onModalClose}
+        triggerSource={downloadAuthGuard.triggerSource}
+        onSignInSuccess={downloadAuthGuard.onSignInSuccess}
+      />
     </div>
   );
 } 
