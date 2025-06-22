@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
@@ -29,7 +28,7 @@ import { AutocompleteInput } from "../_components/AutocompleteInput";
 import { TripConstraintsControls } from "../_components/TripConstraintsControls";
 import { getDayColorsArray } from "~/lib/mapUtils";
 import { useRouter } from "next/navigation";
-import { useTripConstraintStore } from "~/app/_hooks/useTripConstraintStore";
+import { useTripConstraintStore } from "../_hooks/useTripConstraintStore";
 
 // Mapbox access token
 mapboxgl.accessToken = env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
@@ -111,14 +110,14 @@ export default function ExplorePage() {
   } = useSegmentExplore(debouncedBounds);
 
   // Get saved segments (used to be "starred")
-  const { data: savedSegments = [] } =
-    api.segment.getMySavedSegments.useQuery();
+  // const { data: savedSegments = [] } =
+  //   api.segment.getMySavedSegments.useQuery();
 
   // Get favourite count for header badge
-  const { data: favouriteCount } = api.favourite.count.useQuery(undefined, {
-    refetchInterval: 60000, // Refresh every minute
-    staleTime: 0, // Always consider stale for real-time updates
-  });
+  // const { data: favouriteCount } = api.favourite.count.useQuery(undefined, {
+  //   refetchInterval: 60000, // Refresh every minute
+  //   staleTime: 0, // Always consider stale for real-time updates
+  // });
 
   // Rate limiting handler for segments
   const { isRateLimited: isSegmentRateLimited } = useRateLimitHandler();

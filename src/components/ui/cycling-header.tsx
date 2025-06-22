@@ -18,11 +18,9 @@ import {
 import { Button } from "~/components/ui/button";
 import {
   NavigationMenu,
-  NavigationMenuContent,
   NavigationMenuItem,
   NavigationMenuLink,
   NavigationMenuList,
-  NavigationMenuTrigger,
 } from "~/components/ui/navigation-menu";
 import {
   Sheet,
@@ -32,10 +30,6 @@ import {
   SheetTrigger,
 } from "~/components/ui/sheet";
 import { api } from "~/trpc/react";
-
-function cn(...classes: (string | undefined | null | false)[]): string {
-  return classes.filter(Boolean).join(' ');
-}
 
 interface NavigationItem {
   title: string;
@@ -64,11 +58,19 @@ export const CyclingHeader: React.FC = () => {
   });
 
   const handleSignOut = async () => {
-    await signOut({ redirectTo: "/" });
+    try {
+      await signOut({ redirectTo: "/" });
+    } catch (error) {
+      console.error("Sign out error:", error);
+    }
   };
 
   const handleSignIn = async () => {
-    await signIn("strava", { redirectTo: "/" });
+    try {
+      await signIn("strava", { redirectTo: "/" });
+    } catch (error) {
+      console.error("Sign in error:", error);
+    }
   };
 
   return (
@@ -126,12 +128,12 @@ export const CyclingHeader: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                <Button variant="outline" size="sm" onClick={handleSignOut}>
+                <Button variant="outline" size="sm" onClick={() => void handleSignOut()}>
                   Sign out
                 </Button>
               </div>
             ) : (
-              <Button size="sm" onClick={handleSignIn} className="bg-orange-500 hover:bg-orange-600">
+              <Button size="sm" onClick={() => void handleSignIn()} className="bg-orange-500 hover:bg-orange-600">
                 <LogIn className="h-4 w-4 mr-2" />
                 Connect with Strava
               </Button>
@@ -203,7 +205,7 @@ export const CyclingHeader: React.FC = () => {
                           variant="outline" 
                           className="w-full" 
                           onClick={() => {
-                            handleSignOut();
+                            void handleSignOut();
                             setIsMobileMenuOpen(false);
                           }}
                         >
@@ -214,7 +216,7 @@ export const CyclingHeader: React.FC = () => {
                       <Button 
                         className="w-full bg-orange-500 hover:bg-orange-600" 
                         onClick={() => {
-                          handleSignIn();
+                          void handleSignIn();
                           setIsMobileMenuOpen(false);
                         }}
                       >

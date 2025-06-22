@@ -10,6 +10,38 @@ import { downloadRoutesAsZip, type RouteForGPX } from "~/lib/gpxUtils";
 import { TripMapDisplay } from "../../_components/TripMapDisplay";
 import type { Trip } from "../../_hooks/useTripRouteStore";
 
+// Type definitions for trip data from API
+interface TripSegment {
+  name: string;
+}
+
+interface TripDay {
+  day: number;
+  dayName?: string;
+  startLocality: string;
+  endLocality: string;
+  distanceKm: number;
+  elevationM: number;
+  segmentCount?: number;
+  durationHours?: number;
+  segments?: TripSegment[];
+  geometry?: {
+    type: string;
+    coordinates: [number, number][];
+  };
+}
+
+interface TripData {
+  days: TripDay[];
+  totalDistanceKm: number;
+  totalElevationM: number;
+  startDate: string;
+  createdAt: string;
+  creator?: {
+    name: string;
+  };
+}
+
 /**
  * Public trip display page for shared cycling trip URLs
  * Accessible at /trip/[slug] for both authenticated and anonymous users
@@ -30,11 +62,11 @@ export default function TripDisplayPage() {
       enabled: !!slug,
       retry: false, // Don't retry on 404s
     }
-  );
+  ) as { data: TripData | undefined, isLoading: boolean, error: unknown };
 
   // Convert API trip data to Trip format for map component
   const mapTrip: Trip | null = useMemo(() => {
-    if (!trip || !Array.isArray(trip.days)) {
+    if (!trip?.days || !Array.isArray(trip.days)) {
       console.log("[TRIP_DISPLAY_CONVERT]", {
         hasTrip: !!trip,
         hasDays: Array.isArray(trip?.days),
@@ -52,13 +84,13 @@ export default function TripDisplayPage() {
       timestamp: new Date().toISOString(),
     });
 
-        // Convert each day to a route with stored route geometry
-    const routes = (trip.days as any[]).map((day: any) => {
+    // Convert each day to a route with stored route geometry
+    const routes = trip.days.map((day: TripDay) => {
       // Use stored route geometry if available, otherwise create fallback
       let geometry;
       let geometrySource = "stored";
       
-      if (day.geometry && day.geometry.coordinates && day.geometry.coordinates.length > 0) {
+      if (day.geometry?.coordinates && day.geometry.coordinates.length > 0) {
         // Use the actual stored route geometry
         geometry = day.geometry;
         geometrySource = "stored";
@@ -107,7 +139,7 @@ export default function TripDisplayPage() {
             endCoord = foundEndCoord;
           } else {
             // Generate spread-out fallback based on any known location or default
-            const baseCoord = foundStartCoord || foundEndCoord || [20.0, 40.0]; // Mediterranean center
+            const baseCoord = foundStartCoord ?? foundEndCoord ?? [20.0, 40.0]; // Mediterranean center
             const spread = (day.day - 1) * 0.5; // Spread days further apart
             
             if (foundStartCoord) {
@@ -152,14 +184,14 @@ export default function TripDisplayPage() {
         elevationGainM: day.elevationM, // Legacy field for backward compatibility
         ascentM: day.elevationM, // Approximate for now
         descentM: day.elevationM * 0.8, // Approximate for now
-        segmentNames: day.segments?.map((s: any) => s.name) || [],
+        segmentNames: day.segments?.map((s: TripSegment) => s.name ?? 'Unknown Segment') ?? [],
       };
 
       console.log(`[TRIP_DISPLAY_ROUTE_${day.day}]`, {
         dayNumber: day.day,
         distanceKm: day.distanceKm,
         elevationM: day.elevationM,
-        segmentCount: day.segments?.length || 0,
+        segmentCount: day.segments?.length ?? 0,
         coordinateCount: geometry.coordinates.length,
         geometrySource,
         hasStoredGeometry: !!day.geometry,
@@ -193,7 +225,7 @@ export default function TripDisplayPage() {
 
   // Handle GPX download
   const handleDownloadGPX = async () => {
-    if (!trip || !Array.isArray(trip.days)) return;
+    if (!trip?.days || !Array.isArray(trip.days)) return;
 
     try {
       console.log("[TRIP_DISPLAY_GPX_START]", {
@@ -203,14 +235,14 @@ export default function TripDisplayPage() {
       });
 
       // Convert trip data to GPX format
-      const routesForGPX: RouteForGPX[] = (trip.days as any[]).map((day: any) => {
+      const routesForGPX: RouteForGPX[] = trip.days.map((day: TripDay) => {
         // Use stored route geometry if available, otherwise create fallback
         let geometry;
         
-        if (day.geometry && day.geometry.coordinates && day.geometry.coordinates.length > 0) {
+        if (day.geometry?.coordinates && day.geometry.coordinates.length > 0) {
           // Use the actual stored route geometry
           geometry = day.geometry;
-                } else {
+        } else {
           // Fallback: use locality names to generate approximate coordinates for older trips
           console.warn(`[TRIP_GPX_ROUTE_${day.day}] No stored geometry found, using locality-based fallback`);
           
@@ -255,7 +287,7 @@ export default function TripDisplayPage() {
               endCoord = foundEndCoord;
             } else {
               // Generate spread-out fallback based on any known location or default
-              const baseCoord = foundStartCoord || foundEndCoord || [20.0, 40.0]; // Mediterranean center
+              const baseCoord = foundStartCoord ?? foundEndCoord ?? [20.0, 40.0]; // Mediterranean center
               const spread = (day.day - 1) * 0.5; // Spread days further apart
               
               if (foundStartCoord) {
@@ -292,16 +324,16 @@ export default function TripDisplayPage() {
         }
 
         return {
-        dayNumber: day.day,
+          dayNumber: day.day,
           geometry,
-        distanceKm: day.distanceKm,
-        elevationGainM: day.elevationM, // Legacy field
-        ascentM: day.elevationM, // Approximate
-        descentM: day.elevationM * 0.8, // Approximate
-        segmentNames: day.segments?.map((s: any) => s.name) || [],
-        startLocality: day.startLocality,
-        endLocality: day.endLocality,
-        dayName: day.dayName,
+          distanceKm: day.distanceKm,
+          elevationGainM: day.elevationM, // Legacy field
+          ascentM: day.elevationM, // Approximate
+          descentM: day.elevationM * 0.8, // Approximate
+          segmentNames: day.segments?.map((s: TripSegment) => s.name ?? 'Unknown Segment') ?? [],
+          startLocality: day.startLocality,
+          endLocality: day.endLocality,
+          dayName: day.dayName ?? `Day ${day.day}`,
         };
       });
 
@@ -332,7 +364,7 @@ export default function TripDisplayPage() {
   // Handle share link copy
   const handleCopyShareLink = () => {
     const currentUrl = window.location.href;
-    navigator.clipboard.writeText(currentUrl).then(() => {
+    void navigator.clipboard.writeText(currentUrl).then(() => {
       console.log("[TRIP_DISPLAY_SHARE_SUCCESS]", { slug, url: currentUrl });
       toast({
         title: "🔗 Link copied!",
@@ -369,7 +401,7 @@ export default function TripDisplayPage() {
           <div className="mb-4 text-6xl text-gray-400">🗺️</div>
           <h1 className="mb-2 text-2xl font-semibold text-gray-900">Trip Not Found</h1>
           <p className="text-gray-600 mb-6">
-            The trip you're looking for doesn't exist or has been removed.
+            The trip you&apos;re looking for doesn&apos;t exist or has been removed.
           </p>
           <a 
             href="/explore" 
@@ -426,7 +458,7 @@ export default function TripDisplayPage() {
             <div className="space-y-2">
               <div className="flex gap-2">
                 <button
-                  onClick={handleDownloadGPX}
+                  onClick={() => void handleDownloadGPX()}
                   className="flex-1 inline-flex items-center justify-center gap-2 rounded-md bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700"
                 >
                   <Download className="h-4 w-4" />
@@ -461,7 +493,7 @@ export default function TripDisplayPage() {
           <div className="space-y-3">
             <h3 className="text-sm font-medium text-gray-900">Daily Routes</h3>
             
-            {Array.isArray(trip.days) && (trip.days as any[]).map((day: any) => {
+            {Array.isArray(trip.days) && trip.days.map((day: TripDay) => {
               const dayColor = getDayColor(day.day);
               const colorClass = `${dayColor.borderClass} ${dayColor.bgClass}`;
               
@@ -477,11 +509,11 @@ export default function TripDisplayPage() {
                         style={{ backgroundColor: dayColor.hex }}
                       />
                       <h4 className="text-sm font-medium text-gray-900">
-                        {day.dayName}
+                        {day.dayName ?? `Day ${day.day}`}
                       </h4>
                     </div>
                     <span className="text-xs text-gray-500">
-                      {day.segmentCount} segments
+                      {day.segmentCount ?? 0} segments
                     </span>
                   </div>
 
@@ -495,7 +527,7 @@ export default function TripDisplayPage() {
                       ⬆️ {Math.round(day.elevationM)} m
                     </span>
                     <span className="flex items-center gap-1 text-purple-600">
-                      ⏱️ {day.durationHours.toFixed(1)}h
+                      ⏱️ {(day.durationHours ?? 0).toFixed(1)}h
                     </span>
                   </div>
 

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { auth } from "~/server/auth";
 import { redirect } from "next/navigation";
 import { FavouritesTable } from "./_components/FavouritesTable";

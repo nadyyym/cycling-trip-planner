@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { Calendar, MapPin, Clock, Eye, Share2, Route, TrendingUp, ArrowLeft } from 'lucide-react';
+import { Calendar, MapPin, Clock, Eye, Share2, Route, TrendingUp } from 'lucide-react';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader } from '~/components/ui/card';
