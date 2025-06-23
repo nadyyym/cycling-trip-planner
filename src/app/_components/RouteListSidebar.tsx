@@ -15,6 +15,7 @@ import { SignInModal } from "./SignInModal";
 import { useRequireAuth } from "../_hooks/useRequireAuth";
 import { StravaSignInPrompt } from "./StravaSignInPrompt";
 import { useSession } from "next-auth/react";
+import { capture } from "~/lib/posthogClient";
 
 interface RouteListSidebarProps {
   /** Whether the trip planning is in progress */
@@ -138,6 +139,12 @@ export function RouteListSidebar({
     if (!planResponse?.ok) return;
 
     saveAuthGuard.requireAuth(() => {
+      // Track trip save event
+      void capture('trip_save_click', {
+        total_distance_km: Number(planResponse.totalDistanceKm.toFixed(1)),
+        day_count: planResponse.routes.length
+      });
+
       console.log("[ITINERARY_SAVE_ATTEMPT]", {
         routeCount: planResponse.routes.length,
         totalDistanceKm: planResponse.totalDistanceKm,

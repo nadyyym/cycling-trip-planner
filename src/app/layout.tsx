@@ -7,6 +7,7 @@ import { SessionProvider } from "next-auth/react";
 import { TRPCReactProvider } from "~/trpc/react";
 import { Toaster } from "~/components/ui/toaster";
 import { CyclingHeader } from "~/components/ui/cycling-header";
+import { PostHogProvider } from "~/components/PostHogProvider";
 import { auth } from "~/server/auth";
 
 export const metadata: Metadata = {
@@ -47,10 +48,12 @@ export default async function RootLayout({
     <html lang="en" className={`${geist.variable}`}>
       <body>
         <SessionProvider session={session}>
-          <TRPCReactProvider>
-            <CyclingHeader />
-            {children}
-          </TRPCReactProvider>
+          <PostHogProvider>
+            <TRPCReactProvider>
+              <CyclingHeader />
+              {children}
+            </TRPCReactProvider>
+          </PostHogProvider>
         </SessionProvider>
         <Toaster />
       </body>

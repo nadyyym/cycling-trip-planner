@@ -9,6 +9,7 @@ import { api } from "~/trpc/react";
 import { useToast } from "~/hooks/use-toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { capture } from "~/lib/posthogClient";
 
 // Type for trip day data from JSONB
 type TripDay = {
@@ -100,7 +101,13 @@ export default function ItinerariesPage() {
   };
 
   // Handle view trip
-  const handleViewTrip = (slug: string) => {
+  const handleViewTrip = (slug: string, dayCount: number) => {
+    // Track itinerary open event
+    void capture('itinerary_open', {
+      itinerary_id: slug,
+      day_count: dayCount
+    });
+
     console.log("[ITINERARIES_VIEW_TRIP]", {
       slug,
       timestamp: new Date().toISOString(),
@@ -109,7 +116,13 @@ export default function ItinerariesPage() {
   };
 
   // Handle share trip
-  const handleShareTrip = (shareUrl: string, tripTitle: string) => {
+  const handleShareTrip = (shareUrl: string, tripTitle: string, tripId: string) => {
+    // Track itinerary share event
+    void capture('itinerary_share', {
+      itinerary_id: tripId,
+      trip_title: tripTitle
+    });
+
     console.log("[ITINERARIES_SHARE_TRIP]", {
       shareUrl,
       tripTitle,
@@ -179,14 +192,31 @@ export default function ItinerariesPage() {
           <div className="flex gap-2">
             <Button
               variant={filter === 'all' ? 'default' : 'outline'}
-              onClick={() => setFilter('all')}
+              onClick={() => {
+                setFilter('all');
+                void capture('itinerary_filter_change', {
+                  filter: 'all',
+                  result_count: trips.length
+                });
+              }}
               size="sm"
             >
               All Trips ({trips.length})
             </Button>
             <Button
               variant={filter === 'recent' ? 'default' : 'outline'}
-              onClick={() => setFilter('recent')}
+              onClick={() => {
+                const recentCount = trips.filter(trip => {
+                  const sixMonthsAgo = new Date();
+                  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+                  return new Date(trip.createdAt) >= sixMonthsAgo;
+                }).length;
+                setFilter('recent');
+                void capture('itinerary_filter_change', {
+                  filter: 'recent',
+                  result_count: recentCount
+                });
+              }}
               size="sm"
             >
               Recent ({trips.filter(trip => {
@@ -197,7 +227,17 @@ export default function ItinerariesPage() {
             </Button>
             <Button
               variant={filter === 'longer' ? 'default' : 'outline'}
-              onClick={() => setFilter('longer')}
+              onClick={() => {
+                const longerCount = trips.filter(trip => {
+                  const dayCount = Array.isArray(trip.days) ? trip.days.length : 0;
+                  return dayCount >= 3;
+                }).length;
+                setFilter('longer');
+                void capture('itinerary_filter_change', {
+                  filter: 'longer',
+                  result_count: longerCount
+                });
+              }}
               size="sm"
             >
               Multi-day ({trips.filter(trip => {
@@ -311,7 +351,7 @@ export default function ItinerariesPage() {
 
                   <CardFooter className="pt-0 gap-2">
                     <Button
-                      onClick={() => handleViewTrip(trip.slug)}
+                      onClick={() => handleViewTrip(trip.slug, dayCount)}
                       className="flex-1"
                       size="sm"
                     >
@@ -319,7 +359,7 @@ export default function ItinerariesPage() {
                       View Details
                     </Button>
                     <Button
-                      onClick={() => handleShareTrip(trip.shareUrl, tripTitle)}
+                      onClick={() => handleShareTrip(trip.shareUrl, tripTitle, trip.id)}
                       variant="outline"
                       size="sm"
                     >

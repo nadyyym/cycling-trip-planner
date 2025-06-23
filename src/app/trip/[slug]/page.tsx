@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 "use client";
 
 import { useState, useMemo } from "react";
@@ -10,6 +9,7 @@ import { getDayColor } from "~/lib/mapUtils";
 import { downloadRoutesAsZip, type RouteForGPX } from "~/lib/gpxUtils";
 import { TripMapDisplay } from "../../_components/TripMapDisplay";
 import type { Trip } from "../../_hooks/useTripRouteStore";
+import { capture } from "~/lib/posthogClient";
 
 // Type definitions for trip data from API
 interface TripSegment {
@@ -242,6 +242,12 @@ export default function TripDisplayPage() {
   const handleDownloadGPX = async () => {
     if (!trip?.days || !Array.isArray(trip.days)) return;
 
+    // Track GPX download event
+    void capture('trip_download_gpx', {
+      slug: slug,
+      day_count: trip.days.length
+    });
+
     try {
       if (process.env.NODE_ENV !== "production") {
         console.log("[TRIP_DISPLAY_GPX_START]", {
@@ -388,6 +394,11 @@ export default function TripDisplayPage() {
 
   // Handle share link copy
   const handleCopyShareLink = () => {
+    // Track share click event
+    void capture('trip_share_click', {
+      slug: slug
+    });
+
     const currentUrl = window.location.href;
     void navigator.clipboard.writeText(currentUrl).then(() => {
       if (process.env.NODE_ENV !== "production") {

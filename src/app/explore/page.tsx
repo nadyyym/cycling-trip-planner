@@ -28,6 +28,7 @@ import { TripConstraintsControls } from "../_components/TripConstraintsControls"
 import { getDayColorsArray } from "~/lib/mapUtils";
 import { useRouter } from "next/navigation";
 import { useTripConstraintStore } from "../_hooks/useTripConstraintStore";
+import { capture } from "~/lib/posthogClient";
 
 // Dynamic mapbox import - will be loaded when needed
 
@@ -693,6 +694,12 @@ export default function ExplorePage() {
   const handleSearch = async () => {
     if (!searchValue.trim() || !map.current) return;
 
+    // Track explore search event
+    void capture('explore_search_submit', {
+      query_length: searchValue.trim().length,
+      filter_state: 'location_search'
+    });
+
     if (process.env.NODE_ENV !== "production") {
       console.log("Searching for location:", searchValue);
     }
@@ -770,6 +777,12 @@ export default function ExplorePage() {
 
   const handlePlanTrip = () => {
     const selectedSegmentIds_array = Array.from(selectedSegmentIds);
+    
+    // Track explore plan trip click event
+    void capture('explore_plan_trip_click', {
+      selected_segment_count: selectedSegmentIds.size
+    });
+
     if (process.env.NODE_ENV !== "production") {
       console.log("[EXPLORE_PLAN_TRIP]", {
         selectedSegmentCount: selectedSegmentIds.size,

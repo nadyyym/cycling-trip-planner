@@ -9,6 +9,7 @@ import { useTripPlanner, type TripPlanInput } from "../_hooks/useTripPlanner";
 import { useTripConstraintStore } from "../_hooks/useTripConstraintStore";
 import { ArrowLeft, Calendar, MapPin, Mountain } from "lucide-react";
 import Link from "next/link";
+import { capture } from "~/lib/posthogClient";
 
 function NewTripPageContent() {
   // Map error state
@@ -64,6 +65,14 @@ function NewTripPageContent() {
       constraints.startDate &&
       constraints.endDate
     ) {
+      // Track trip plan retry event
+      void capture('trip_plan_submit', {
+        segment_count: segmentIds.length,
+        days: Math.ceil((new Date(constraints.endDate).getTime() - new Date(constraints.startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1,
+        max_daily_distance_km: constraints.maxDailyDistanceKm,
+        max_daily_elevation_m: constraints.maxDailyElevationM
+      });
+
       console.log("[NEW_TRIP_RETRY_PLANNING]", {
         segmentCount: segmentIds.length,
         segmentIds: segmentIds,
@@ -95,6 +104,14 @@ function NewTripPageContent() {
       constraints.startDate &&
       constraints.endDate
     ) {
+      // Track automatic trip planning event
+      void capture('trip_plan_submit', {
+        segment_count: segmentIds.length,
+        days: Math.ceil((new Date(constraints.endDate).getTime() - new Date(constraints.startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1,
+        max_daily_distance_km: constraints.maxDailyDistanceKm,
+        max_daily_elevation_m: constraints.maxDailyElevationM
+      });
+
       if (process.env.NODE_ENV !== "production") {
         console.log("[NEW_TRIP_AUTO_START]", {
           segmentCount: segmentIds.length,

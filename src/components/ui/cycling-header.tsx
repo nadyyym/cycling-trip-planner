@@ -29,6 +29,7 @@ import {
   SheetTrigger,
 } from "~/components/ui/sheet";
 import { api } from "~/trpc/react";
+import { capture } from "~/lib/posthogClient";
 
 interface NavigationItem {
   title: string;
@@ -55,8 +56,17 @@ export const CyclingHeader: React.FC = () => {
     staleTime: 0, // Always consider stale for real-time updates
   });
 
+  // Handle navigation clicks with analytics
+  const handleNavClick = (linkName: NavigationItem['title']) => {
+    void capture('nav_click', { 
+      link_name: linkName as 'Explore' | 'Plan Trip' | 'Favourites' | 'Itineraries'
+    });
+  };
+
   const handleSignOut = async () => {
     try {
+      // Track sign out event
+      void capture('auth_click', { action: 'sign_out' });
       await signOut({ redirectTo: "/" });
     } catch (error) {
       console.error("Sign out error:", error);
@@ -65,6 +75,8 @@ export const CyclingHeader: React.FC = () => {
 
   const handleSignIn = async () => {
     try {
+      // Track sign in event
+      void capture('auth_click', { action: 'sign_in' });
       await signIn("strava", { redirectTo: "/" });
     } catch (error) {
       console.error("Sign in error:", error);
@@ -76,7 +88,11 @@ export const CyclingHeader: React.FC = () => {
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
-          <Link href="/explore" className="flex items-center space-x-2 hover:opacity-80 transition-opacity">
+          <Link 
+            href="/explore" 
+            className="flex items-center space-x-2 hover:opacity-80 transition-opacity"
+            onClick={() => handleNavClick('Explore')}
+          >
             <Bike className="h-6 w-6 text-blue-600" />
             <span className="text-xl font-bold text-foreground">Cycling Trip Planner</span>
           </Link>
@@ -91,6 +107,7 @@ export const CyclingHeader: React.FC = () => {
                       <Link
                         href={item.href}
                         className="group inline-flex h-10 w-max items-center justify-center rounded-md bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none disabled:pointer-events-none disabled:opacity-50"
+                        onClick={() => handleNavClick(item.title)}
                       >
                         <span className="flex items-center space-x-2">
                           {item.icon}
@@ -163,7 +180,10 @@ export const CyclingHeader: React.FC = () => {
                         key={item.title}
                         href={item.href}
                         className="flex items-center space-x-3 rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
-                        onClick={() => setIsMobileMenuOpen(false)}
+                        onClick={() => {
+                          handleNavClick(item.title);
+                          setIsMobileMenuOpen(false);
+                        }}
                       >
                         {item.icon}
                         <span>{item.title}</span>

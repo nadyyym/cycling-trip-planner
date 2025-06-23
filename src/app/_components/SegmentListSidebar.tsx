@@ -10,6 +10,7 @@ import { SignInModal } from "./SignInModal";
 import { useRequireAuth } from "../_hooks/useRequireAuth";
 import { StravaSignInPrompt } from "./StravaSignInPrompt";
 import { useSession } from "next-auth/react";
+import { capture } from "~/lib/posthogClient";
 
 interface SegmentListSidebarProps {
   segments: SegmentDTO[];
@@ -292,6 +293,16 @@ export function SegmentListSidebar({
   };
 
   const handleCardClick = (segmentId: string) => {
+    // Find the segment to get its distance for analytics
+    const segment = segments.find(s => s.id === segmentId);
+    const distanceKm = segment ? segment.distance / 1000 : 0;
+
+    // Track segment click event
+    void capture('explore_segment_click', {
+      segment_id: segmentId,
+      distance_km: Number(distanceKm.toFixed(1))
+    });
+
     // Card click now toggles selection (per PRD requirement)
     console.log("[SEGMENT_CARD_CLICK_SELECT]", { segmentId });
     const result = toggleSegmentSelection(segmentId, "card");

@@ -73,6 +73,11 @@ NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN="your-mapbox-token"
 
 # Trip Sharing
 PUBLIC_TRIP_BASE_URL="http://localhost:3000" # Base URL for shareable trip links
+
+# Analytics (PostHog)
+NEXT_PUBLIC_POSTHOG_KEY="your-posthog-project-key"
+NEXT_PUBLIC_POSTHOG_HOST="https://eu.posthog.com" # Use EU instance for GDPR compliance
+# NEXT_PUBLIC_ANALYTICS_DISABLED=true # Uncomment to disable analytics in development
 ```
 
 ## Deployment
@@ -223,6 +228,56 @@ The cycling trip planner provides a seamless end-to-end experience:
 - **Smart Optimization**: TSP algorithms minimize travel time between segments
 - **Real Geometry**: Actual cycling routes using Mapbox Directions API
 - **Export Ready**: Download GPX files for your GPS device
+
+## Analytics
+
+The application includes comprehensive user analytics powered by PostHog to help understand user behavior and improve the product experience.
+
+### Event Taxonomy
+
+**Header Navigation Events:**
+- `nav_click` - User clicks on navigation links (Explore, Plan Trip, Favourites, Itineraries)
+- `auth_click` - User authentication actions (sign in, sign out)
+
+**Explore Page Events:**
+- `explore_search_submit` - User submits location search
+- `explore_segment_click` - User clicks on cycling segments
+- `explore_plan_trip_click` - User initiates trip planning
+
+**Trip Planning Events:**
+- `trip_plan_submit` - User submits trip planning request
+- `trip_save_click` - User saves planned trip as itinerary
+
+**Trip Detail Events:**
+- `trip_download_gpx` - User downloads GPX files
+- `trip_share_click` - User copies share link
+
+**Itineraries Events:**
+- `itinerary_open` - User opens saved trip
+- `itinerary_share` - User shares trip link
+- `itinerary_filter_change` - User changes trip filter
+
+### Privacy & Compliance
+
+- **EU GDPR Compliant**: Uses PostHog EU instance by default
+- **No PII Collection**: Events exclude sensitive data like Strava tokens or raw email addresses
+- **Opt-out Ready**: Respects `NEXT_PUBLIC_ANALYTICS_DISABLED` environment variable
+- **Identified Users Only**: Only creates user profiles for authenticated users
+
+### Configuration
+
+Set up PostHog analytics by adding these environment variables:
+
+```bash
+NEXT_PUBLIC_POSTHOG_KEY="your-posthog-project-key"
+NEXT_PUBLIC_POSTHOG_HOST="https://eu.posthog.com"
+# NEXT_PUBLIC_ANALYTICS_DISABLED=true # Disable analytics
+```
+
+To disable analytics in development:
+```bash
+NEXT_PUBLIC_ANALYTICS_DISABLED=true
+```
 
 ## Features
 
@@ -495,6 +550,19 @@ The test script verifies:
 - Caching and performance optimization
 - Accessibility and ARIA compliance
 - Integration in both sidebar and dialog
+
+### Testing PostHog Analytics
+
+Test the analytics integration:
+```bash
+# Start the development server
+npm run dev
+
+# In another terminal, run the analytics test
+./examples/test-posthog-analytics.sh
+```
+
+The test script provides detailed instructions for verifying that all button interactions are properly tracked. Check your browser's developer console for `[PostHog] Event captured:` messages when interacting with the application.
 
 ### Testing Favourites
 
